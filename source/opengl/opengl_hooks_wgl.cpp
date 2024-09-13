@@ -120,51 +120,9 @@ public:
 		device_impl(initial_hdc, hglrc, compatibility_context),
 		device_context_impl(this, hglrc)
 	{
-#if RESHADE_ADDON
-		reshade::load_addons();
-
-		reshade::invoke_addon_event<reshade::addon_event::init_device>(this);
-
-		GLint max_combined_texture_image_units = 0;
-		gl.GetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_combined_texture_image_units);
-		GLint max_shader_storage_buffer_bindings = 0;
-		gl.GetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &max_shader_storage_buffer_bindings);
-		GLint max_uniform_buffer_bindings = 0;
-		gl.GetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &max_uniform_buffer_bindings);
-		GLint max_image_units = 0;
-		gl.GetIntegerv(GL_MAX_IMAGE_UNITS, &max_image_units);
-		GLint max_uniform_locations = 0;
-		gl.GetIntegerv(GL_MAX_UNIFORM_LOCATIONS, &max_uniform_locations);
-
-		const reshade::api::pipeline_layout_param global_pipeline_layout_params[7] = {
-			reshade::api::descriptor_range { 0, 0, 0, static_cast<uint32_t>(max_combined_texture_image_units), reshade::api::shader_stage::all, 1, reshade::api::descriptor_type::sampler_with_resource_view },
-			reshade::api::descriptor_range { 0, 0, 0, static_cast<uint32_t>(max_shader_storage_buffer_bindings), reshade::api::shader_stage::all, 1, reshade::api::descriptor_type::shader_storage_buffer },
-			reshade::api::descriptor_range { 0, 0, 0, static_cast<uint32_t>(max_uniform_buffer_bindings), reshade::api::shader_stage::all, 1, reshade::api::descriptor_type::constant_buffer },
-			reshade::api::descriptor_range { 0, 0, 0, static_cast<uint32_t>(max_image_units), reshade::api::shader_stage::all, 1, reshade::api::descriptor_type::unordered_access_view },
-			/* Float uniforms */ reshade::api::constant_range { UINT32_MAX, 0, 0, static_cast<uint32_t>(max_uniform_locations) * 4, reshade::api::shader_stage::all },
-			/* Signed integer uniforms */ reshade::api::constant_range { UINT32_MAX, 0, 0, static_cast<uint32_t>(max_uniform_locations) * 4, reshade::api::shader_stage::all },
-			/* Unsigned integer uniforms */ reshade::api::constant_range { UINT32_MAX, 0, 0, static_cast<uint32_t>(max_uniform_locations) * 4, reshade::api::shader_stage::all },
-		};
-		device_impl::create_pipeline_layout(static_cast<uint32_t>(std::size(global_pipeline_layout_params)), global_pipeline_layout_params, &_global_pipeline_layout);
-		reshade::invoke_addon_event<reshade::addon_event::init_pipeline_layout>(this, static_cast<uint32_t>(std::size(global_pipeline_layout_params)), global_pipeline_layout_params, _global_pipeline_layout);
-
-		reshade::invoke_addon_event<reshade::addon_event::init_command_list>(this);
-		reshade::invoke_addon_event<reshade::addon_event::init_command_queue>(this);
-#endif
 	}
 	~wgl_device()
 	{
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::destroy_command_queue>(this);
-		reshade::invoke_addon_event<reshade::addon_event::destroy_command_list>(this);
-
-		reshade::invoke_addon_event<reshade::addon_event::destroy_pipeline_layout>(this, _global_pipeline_layout);
-		device_impl::destroy_pipeline_layout(_global_pipeline_layout);
-
-		reshade::invoke_addon_event<reshade::addon_event::destroy_device>(this);
-
-		reshade::unload_addons();
-#endif
 	}
 
 	auto get_pixel_format() const { return _pixel_format; }
@@ -194,17 +152,9 @@ public:
 	wgl_device_context(wgl_device *device, HGLRC hglrc) :
 		device_context_impl(device, hglrc)
 	{
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::init_command_list>(this);
-		reshade::invoke_addon_event<reshade::addon_event::init_command_queue>(this);
-#endif
 	}
 	~wgl_device_context()
 	{
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::destroy_command_queue>(this);
-		reshade::invoke_addon_event<reshade::addon_event::destroy_command_list>(this);
-#endif
 	}
 };
 
@@ -242,33 +192,6 @@ public:
 		_last_height = height;
 		_init_effect_runtime = true;
 
-#if RESHADE_ADDON
-		const auto device = static_cast<wgl_device *>(get_device());
-
-		reshade::invoke_addon_event<reshade::addon_event::init_swapchain>(this);
-
-		if (device->_default_depth_format != reshade::api::format::unknown)
-		{
-			reshade::invoke_addon_event<reshade::addon_event::init_resource>(
-				device,
-				device->get_resource_desc(default_ds),
-				nullptr,
-				reshade::api::resource_usage::depth_stencil,
-				default_ds);
-			reshade::invoke_addon_event<reshade::addon_event::init_resource_view>(
-				device,
-				default_ds,
-				reshade::api::resource_usage::depth_stencil,
-				reshade::api::resource_view_desc(device->_default_depth_format),
-				default_dsv);
-		}
-
-		// Communicate default state to add-ons
-		reshade::invoke_addon_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(
-			context,
-			1, &default_rtv,
-			device->_default_depth_format != reshade::api::format::unknown ? default_dsv : reshade::api::resource_view {});
-#endif
 	}
 	void on_reset()
 	{
@@ -280,17 +203,6 @@ public:
 		_last_width = 0;
 		_last_height = 0;
 
-#if RESHADE_ADDON
-		const auto device = static_cast<wgl_device *>(get_device());
-
-		if (device->_default_depth_format != reshade::api::format::unknown)
-		{
-			reshade::invoke_addon_event<reshade::addon_event::destroy_resource_view>(device, default_dsv);
-			reshade::invoke_addon_event<reshade::addon_event::destroy_resource>(device, default_ds);
-		}
-
-		reshade::invoke_addon_event<reshade::addon_event::destroy_swapchain>(this);
-#endif
 	}
 	void on_present(reshade::opengl::device_context_impl *context)
 	{
@@ -322,12 +234,6 @@ public:
 			_init_effect_runtime = false;
 		}
 
-#if RESHADE_ADDON
-		// Behave as if immediate command list is flushed
-		reshade::invoke_addon_event<reshade::addon_event::execute_command_list>(context, context);
-
-		reshade::invoke_addon_event<reshade::addon_event::present>(context, this, nullptr, nullptr, 0, nullptr);
-#endif
 
 		// Assume that the correct OpenGL context is still current here
 		reshade::present_effect_runtime(this, context);
@@ -550,125 +456,6 @@ extern "C" BOOL  WINAPI wglSetPixelFormat(HDC hdc, int iPixelFormat, const PIXEL
 {
 	reshade::log::message(reshade::log::level::info, "Redirecting wglSetPixelFormat(hdc = %p, iPixelFormat = %d, ppfd = %p) ...", hdc, iPixelFormat, ppfd);
 
-#if RESHADE_ADDON
-	reshade::load_addons();
-
-	const HWND hwnd = WindowFromDC(hdc);
-
-	PIXELFORMATDESCRIPTOR pfd = { sizeof(pfd) };
-	DescribePixelFormat(hdc, iPixelFormat, sizeof(pfd), &pfd);
-
-	reshade::api::swapchain_desc desc = {};
-	desc.back_buffer.type = reshade::api::resource_type::surface;
-	desc.back_buffer.texture.format = reshade::opengl::convert_pixel_format(pfd);
-	desc.back_buffer.heap = reshade::api::memory_heap::gpu_only;
-	desc.back_buffer.usage = reshade::api::resource_usage::render_target | reshade::api::resource_usage::copy_dest | reshade::api::resource_usage::copy_source | reshade::api::resource_usage::resolve_dest;
-	desc.back_buffer_count = 1;
-
-	if (hwnd != nullptr)
-	{
-		assert((pfd.dwFlags & PFD_DRAW_TO_WINDOW) != 0);
-
-		RECT window_rect = {};
-		GetClientRect(hwnd, &window_rect);
-
-		desc.back_buffer.texture.width = window_rect.right;
-		desc.back_buffer.texture.height = window_rect.bottom;
-	}
-
-	if (pfd.dwFlags & PFD_DOUBLEBUFFER)
-		desc.back_buffer_count = 2;
-	if (pfd.dwFlags & PFD_STEREO)
-		desc.back_buffer.texture.depth_or_layers = 2;
-
-	if (s_hooks_installed && reshade::hooks::call(wglGetPixelFormatAttribivARB) != nullptr)
-	{
-		int attrib_names[2] = { wgl_attribute::WGL_SAMPLES_ARB, wgl_attribute::WGL_SWAP_METHOD_ARB }, attrib_values[2] = {};
-		if (reshade::hooks::call(wglGetPixelFormatAttribivARB)(hdc, iPixelFormat, 0, 2, attrib_names, attrib_values))
-		{
-			if (attrib_values[0] != 0)
-				desc.back_buffer.texture.samples = static_cast<uint16_t>(attrib_values[0]);
-			desc.present_mode = attrib_values[1];
-		}
-	}
-
-	desc.present_flags = pfd.dwFlags;
-
-	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, hwnd))
-	{
-		reshade::opengl::convert_pixel_format(desc.back_buffer.texture.format, pfd);
-
-		pfd.dwFlags = desc.present_flags & ~(PFD_DOUBLEBUFFER | PFD_STEREO);
-
-		if (desc.back_buffer_count > 1)
-			pfd.dwFlags |= PFD_DOUBLEBUFFER;
-		if (desc.back_buffer.texture.depth_or_layers == 2)
-			pfd.dwFlags |= PFD_STEREO;
-
-		if (s_hooks_installed && reshade::hooks::call(wglChoosePixelFormatARB) != nullptr)
-		{
-			int i = 14;
-			wgl_attribute attribs[17] = {
-				{ wgl_attribute::WGL_DRAW_TO_WINDOW_ARB, (pfd.dwFlags & PFD_DRAW_TO_WINDOW) != 0 },
-				{ wgl_attribute::WGL_DRAW_TO_BITMAP_ARB, (pfd.dwFlags & PFD_DRAW_TO_BITMAP) != 0 },
-				{ wgl_attribute::WGL_SUPPORT_GDI_ARB, (pfd.dwFlags & PFD_SUPPORT_GDI) != 0 },
-				{ wgl_attribute::WGL_SUPPORT_OPENGL_ARB, (pfd.dwFlags & PFD_SUPPORT_OPENGL) != 0 },
-				{ wgl_attribute::WGL_DOUBLE_BUFFER_ARB, (pfd.dwFlags & PFD_DOUBLEBUFFER) != 0 },
-				{ wgl_attribute::WGL_STEREO_ARB, (pfd.dwFlags & PFD_STEREO) != 0 },
-				{ wgl_attribute::WGL_RED_BITS_ARB, pfd.cRedBits },
-				{ wgl_attribute::WGL_GREEN_BITS_ARB, pfd.cGreenBits },
-				{ wgl_attribute::WGL_BLUE_BITS_ARB, pfd.cBlueBits },
-				{ wgl_attribute::WGL_ALPHA_BITS_ARB, pfd.cAlphaBits },
-				{ wgl_attribute::WGL_DEPTH_BITS_ARB, pfd.cDepthBits },
-				{ wgl_attribute::WGL_STENCIL_BITS_ARB, pfd.cStencilBits },
-				{ wgl_attribute::WGL_SAMPLE_BUFFERS_ARB, desc.back_buffer.texture.samples > 1 },
-				{ wgl_attribute::WGL_SAMPLES_ARB, desc.back_buffer.texture.samples > 1 ? desc.back_buffer.texture.samples : 0 },
-			};
-
-			if (desc.present_mode)
-			{
-				attribs[i].name = wgl_attribute::WGL_SWAP_METHOD_ARB;
-				attribs[i++].value = static_cast<int>(desc.present_mode);
-			}
-
-			if (desc.back_buffer.texture.format == reshade::api::format::r8g8b8a8_unorm_srgb || desc.back_buffer.texture.format == reshade::api::format::r8g8b8x8_unorm_srgb ||
-				desc.back_buffer.texture.format == reshade::api::format::b8g8r8a8_unorm_srgb || desc.back_buffer.texture.format == reshade::api::format::b8g8r8x8_unorm_srgb ||
-				desc.back_buffer.texture.format == reshade::api::format::bc1_unorm_srgb || desc.back_buffer.texture.format == reshade::api::format::bc2_unorm_srgb || desc.back_buffer.texture.format == reshade::api::format::bc3_unorm_srgb)
-			{
-				attribs[i].name = wgl_attribute::WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB;
-				attribs[i++].value = 1;
-			}
-
-			UINT num_formats = 0;
-			if (!reshade::hooks::call(wglChoosePixelFormatARB)(hdc, reinterpret_cast<const int *>(attribs), nullptr, 1, &iPixelFormat, &num_formats) || num_formats == 0)
-			{
-				reshade::log::message(reshade::log::level::error, "Failed to find a suitable pixel format with error code %lu!", GetLastError() & 0xFFFF);
-			}
-			else
-			{
-				ppfd = &pfd;
-			}
-		}
-		else
-		{
-			assert(desc.back_buffer.texture.samples <= 1);
-
-			const int pixel_format = reshade::hooks::call(wglChoosePixelFormat)(hdc, &pfd);
-			if (pixel_format == 0)
-			{
-				reshade::log::message(reshade::log::level::error, "Failed to find a suitable pixel format with error code %lu!", GetLastError() & 0xFFFF);
-			}
-			else
-			{
-				iPixelFormat = pixel_format;
-				ppfd = &pfd;
-			}
-		}
-	}
-
-	// This is not great, since it will mean add-ons are loaded/unloaded multiple times, but otherwise they will never be unloaded
-	reshade::unload_addons();
-#endif
 
 	if (!reshade::hooks::call(wglSetPixelFormat)(hdc, iPixelFormat, ppfd))
 	{
@@ -1404,79 +1191,6 @@ extern "C" PROC  WINAPI wglGetProcAddress(LPCSTR lpszProc)
 {
 	if (lpszProc == nullptr)
 		return nullptr;
-#if RESHADE_ADDON
-	// Redirect some old extension functions to their modern variants in core OpenGL
-	#pragma region GL_ARB_draw_instanced
-	else if (0 == std::strcmp(lpszProc, "glDrawArraysInstancedARB"))
-		lpszProc = "glDrawArraysInstanced";
-	else if (0 == std::strcmp(lpszProc, "glDrawElementsInstancedARB"))
-		lpszProc = "glDrawElementsInstanced";
-	#pragma endregion
-	#pragma region GL_ARB_vertex_buffer_object
-	else if (0 == std::strcmp(lpszProc, "glIsBufferARB"))
-		lpszProc = "glIsBuffer";
-	else if (0 == std::strcmp(lpszProc, "glBindBufferARB"))
-		lpszProc = "glBindBuffer";
-	else if (0 == std::strcmp(lpszProc, "glGenBuffersARB"))
-		lpszProc = "glGenBuffers";
-	else if (0 == std::strcmp(lpszProc, "glDeleteBuffersARB"))
-		lpszProc = "glDeleteBuffers";
-	else if (0 == std::strcmp(lpszProc, "glBufferDataARB"))
-		lpszProc = "glBufferData";
-	else if (0 == std::strcmp(lpszProc, "glBufferSubDataARB"))
-		lpszProc = "glBufferSubData";
-	else if (0 == std::strcmp(lpszProc, "glGetBufferSubDataARB"))
-		lpszProc = "glGetBufferSubData";
-	else if (0 == std::strcmp(lpszProc, "glMapBufferARB"))
-		lpszProc = "glMapBuffer";
-	else if (0 == std::strcmp(lpszProc, "glUnmapBufferARB"))
-		lpszProc = "glUnmapBuffer";
-	else if (0 == std::strcmp(lpszProc, "glGetBufferParameterivARB"))
-		lpszProc = "glGetBufferParameteriv";
-	else if (0 == std::strcmp(lpszProc, "glGetBufferPointervARB"))
-		lpszProc = "glGetBufferPointerv";
-	#pragma endregion
-	#pragma region GL_EXT_draw_instanced
-	else if (0 == std::strcmp(lpszProc, "glDrawArraysInstancedEXT"))
-		lpszProc = "glDrawArraysInstanced";
-	else if (0 == std::strcmp(lpszProc, "glDrawElementsInstancedEXT"))
-		lpszProc = "glDrawElementsInstanced";
-	#pragma endregion
-	#pragma region GL_EXT_framebuffer_object
-	else if (0 == std::strcmp(lpszProc, "glIsFramebufferEXT"))
-		lpszProc = "glIsFramebuffer";
-	// glBindFramebuffer and glBindFramebufferEXT have different semantics (core variant requires an existing FBO), so do not redirect
-	else if (0 == std::strcmp(lpszProc, "glGenFramebuffersEXT"))
-		lpszProc = "glGenFramebuffers";
-	else if (0 == std::strcmp(lpszProc, "glDeleteFramebuffersEXT"))
-		lpszProc = "glDeleteFramebuffers";
-	else if (0 == std::strcmp(lpszProc, "glCheckFramebufferStatusEXT"))
-		lpszProc = "glCheckFramebufferStatus";
-	else if (0 == std::strcmp(lpszProc, "glFramebufferRenderbufferEXT"))
-		lpszProc = "glFramebufferRenderbuffer";
-	else if (0 == std::strcmp(lpszProc, "glFramebufferTexture1DEXT"))
-		lpszProc = "glFramebufferTexture1D";
-	else if (0 == std::strcmp(lpszProc, "glFramebufferTexture2DEXT"))
-		lpszProc = "glFramebufferTexture2D";
-	else if (0 == std::strcmp(lpszProc, "glFramebufferTexture3DEXT"))
-		lpszProc = "glFramebufferTexture3D";
-	else if (0 == std::strcmp(lpszProc, "glGetFramebufferAttachmentParameterivEXT"))
-		lpszProc = "glGetFramebufferAttachmentParameteriv";
-	else if (0 == std::strcmp(lpszProc, "glIsRenderbufferEXT"))
-		lpszProc = "glIsRenderbuffer";
-	// glBindRenderbuffer and glBindRenderbufferEXT have different semantics (core variant requires an existing RBO), so do not redirect
-	else if (0 == std::strcmp(lpszProc, "glGenRenderbuffersEXT"))
-		lpszProc = "glGenRenderbuffers";
-	else if (0 == std::strcmp(lpszProc, "glDeleteRenderbuffersEXT"))
-		lpszProc = "glDeleteRenderbuffers";
-	else if (0 == std::strcmp(lpszProc, "glRenderbufferStorageEXT"))
-		lpszProc = "glRenderbufferStorage";
-	else if (0 == std::strcmp(lpszProc, "glGetRenderbufferParameterivEXT"))
-		lpszProc = "glGetRenderbufferParameteriv";
-	else if (0 == std::strcmp(lpszProc, "glGenerateMipmapEXT"))
-		lpszProc = "glGenerateMipmap";
-	#pragma endregion
-#endif
 
 	static const auto trampoline = reshade::hooks::call(wglGetProcAddress);
 
@@ -1616,209 +1330,6 @@ extern "C" PROC  WINAPI wglGetProcAddress(LPCSTR lpszProc)
 	#define HOOK_PROC(name) \
 		if (0 == std::strcmp(lpszProc, #name)) \
 			return reinterpret_cast<PROC>(name)
-#endif
-
-#if RESHADE_ADDON
-#ifdef GL_VERSION_1_2
-		HOOK_PROC(glTexImage3D);
-		HOOK_PROC(glTexSubImage3D);
-		HOOK_PROC(glCopyTexSubImage3D);
-		HOOK_PROC(glDrawRangeElements);
-#endif
-#ifdef GL_VERSION_1_3
-		HOOK_PROC(glCompressedTexImage1D);
-		HOOK_PROC(glCompressedTexImage2D);
-		HOOK_PROC(glCompressedTexImage3D);
-		HOOK_PROC(glCompressedTexSubImage1D);
-		HOOK_PROC(glCompressedTexSubImage2D);
-		HOOK_PROC(glCompressedTexSubImage3D);
-#endif
-#ifdef GL_VERSION_1_4
-		HOOK_PROC(glBlendFuncSeparate);
-		HOOK_PROC(glBlendColor);
-		HOOK_PROC(glBlendEquation);
-		HOOK_PROC(glMultiDrawArrays);
-		HOOK_PROC(glMultiDrawElements);
-#endif
-#ifdef GL_VERSION_1_5
-		HOOK_PROC(glDeleteBuffers);
-		HOOK_PROC(glBufferData);
-		HOOK_PROC(glBufferSubData);
-		HOOK_PROC(glMapBuffer);
-		HOOK_PROC(glUnmapBuffer);
-		HOOK_PROC(glBindBuffer);
-#endif
-#ifdef GL_VERSION_2_0
-		HOOK_PROC(glDeleteProgram);
-		HOOK_PROC(glLinkProgram);
-		HOOK_PROC(glShaderSource);
-		HOOK_PROC(glUseProgram);
-		HOOK_PROC(glBlendEquationSeparate);
-		HOOK_PROC(glStencilFuncSeparate);
-		HOOK_PROC(glStencilOpSeparate);
-		HOOK_PROC(glStencilMaskSeparate);
-		HOOK_PROC(glUniform1f);
-		HOOK_PROC(glUniform2f);
-		HOOK_PROC(glUniform3f);
-		HOOK_PROC(glUniform4f);
-		HOOK_PROC(glUniform1i);
-		HOOK_PROC(glUniform2i);
-		HOOK_PROC(glUniform3i);
-		HOOK_PROC(glUniform4i);
-		HOOK_PROC(glUniform1fv);
-		HOOK_PROC(glUniform2fv);
-		HOOK_PROC(glUniform3fv);
-		HOOK_PROC(glUniform4fv);
-		HOOK_PROC(glUniform1iv);
-		HOOK_PROC(glUniform2iv);
-		HOOK_PROC(glUniform3iv);
-		HOOK_PROC(glUniform4iv);
-		HOOK_PROC(glUniformMatrix2fv);
-		HOOK_PROC(glUniformMatrix3fv);
-		HOOK_PROC(glUniformMatrix4fv);
-		HOOK_PROC(glVertexAttribPointer);
-#endif
-#ifdef GL_VERSION_2_1
-		HOOK_PROC(glUniformMatrix2x3fv);
-		HOOK_PROC(glUniformMatrix3x2fv);
-		HOOK_PROC(glUniformMatrix2x4fv);
-		HOOK_PROC(glUniformMatrix4x2fv);
-		HOOK_PROC(glUniformMatrix3x4fv);
-		HOOK_PROC(glUniformMatrix4x3fv);
-#endif
-#ifdef GL_VERSION_3_0
-		HOOK_PROC(glMapBufferRange);
-		HOOK_PROC(glDeleteRenderbuffers);
-		HOOK_PROC(glFramebufferTexture1D);
-		HOOK_PROC(glFramebufferTexture2D);
-		HOOK_PROC(glFramebufferTexture3D);
-		HOOK_PROC(glFramebufferTextureLayer);
-		HOOK_PROC(glFramebufferRenderbuffer);
-		HOOK_PROC(glRenderbufferStorage);
-		HOOK_PROC(glRenderbufferStorageMultisample);
-		HOOK_PROC(glClearBufferiv);
-		HOOK_PROC(glClearBufferuiv);
-		HOOK_PROC(glClearBufferfv);
-		HOOK_PROC(glClearBufferfi);
-		HOOK_PROC(glBlitFramebuffer);
-		HOOK_PROC(glGenerateMipmap);
-		HOOK_PROC(glBindBufferBase);
-		HOOK_PROC(glBindBufferRange);
-		HOOK_PROC(glBindFramebuffer);
-		HOOK_PROC(glBindVertexArray);
-		HOOK_PROC(glUniform1ui);
-		HOOK_PROC(glUniform2ui);
-		HOOK_PROC(glUniform3ui);
-		HOOK_PROC(glUniform4ui);
-		HOOK_PROC(glUniform1uiv);
-		HOOK_PROC(glUniform2uiv);
-		HOOK_PROC(glUniform3uiv);
-		HOOK_PROC(glUniform4uiv);
-		HOOK_PROC(glDeleteVertexArrays);
-		HOOK_PROC(glVertexAttribIPointer);
-#endif
-#ifdef GL_VERSION_3_1
-		HOOK_PROC(glTexBuffer);
-		HOOK_PROC(glCopyBufferSubData);
-		HOOK_PROC(glDrawArraysInstanced);
-		HOOK_PROC(glDrawElementsInstanced);
-#endif
-#ifdef GL_VERSION_3_2
-		HOOK_PROC(glFramebufferTexture);
-		HOOK_PROC(glTexImage2DMultisample);
-		HOOK_PROC(glTexImage3DMultisample);
-		HOOK_PROC(glDrawElementsBaseVertex);
-		HOOK_PROC(glDrawRangeElementsBaseVertex);
-		HOOK_PROC(glDrawElementsInstancedBaseVertex);
-		HOOK_PROC(glMultiDrawElementsBaseVertex);
-#endif
-#ifdef GL_VERSION_4_0
-		HOOK_PROC(glDrawArraysIndirect);
-		HOOK_PROC(glDrawElementsIndirect);
-#endif
-#ifdef GL_VERSION_4_1
-		HOOK_PROC(glScissorArrayv);
-		HOOK_PROC(glScissorIndexed);
-		HOOK_PROC(glScissorIndexedv);
-		HOOK_PROC(glViewportArrayv);
-		HOOK_PROC(glViewportIndexedf);
-		HOOK_PROC(glViewportIndexedfv);
-		HOOK_PROC(glVertexAttribLPointer);
-#endif
-#ifdef GL_VERSION_4_2
-		HOOK_PROC(glTexStorage1D);
-		HOOK_PROC(glTexStorage2D);
-		HOOK_PROC(glTexStorage3D);
-		HOOK_PROC(glBindImageTexture);
-		HOOK_PROC(glDrawArraysInstancedBaseInstance);
-		HOOK_PROC(glDrawElementsInstancedBaseInstance);
-		HOOK_PROC(glDrawElementsInstancedBaseVertexBaseInstance);
-#endif
-#ifdef GL_VERSION_4_3
-		HOOK_PROC(glTextureView);
-		HOOK_PROC(glTexBufferRange);
-		HOOK_PROC(glTexStorage2DMultisample);
-		HOOK_PROC(glTexStorage3DMultisample);
-		HOOK_PROC(glCopyImageSubData);
-		HOOK_PROC(glBindVertexBuffer);
-		HOOK_PROC(glDispatchCompute);
-		HOOK_PROC(glDispatchComputeIndirect);
-		HOOK_PROC(glMultiDrawArraysIndirect);
-		HOOK_PROC(glMultiDrawElementsIndirect);
-#endif
-#ifdef GL_VERSION_4_4
-		HOOK_PROC(glBufferStorage);
-		HOOK_PROC(glBindBuffersBase);
-		HOOK_PROC(glBindBuffersRange);
-		HOOK_PROC(glBindTextures);
-		HOOK_PROC(glBindImageTextures);
-		HOOK_PROC(glBindVertexBuffers);
-#endif
-#ifdef GL_VERSION_4_5
-		HOOK_PROC(glTextureBuffer);
-		HOOK_PROC(glTextureBufferRange);
-		HOOK_PROC(glNamedBufferData);
-		HOOK_PROC(glNamedBufferStorage);
-		HOOK_PROC(glTextureStorage1D);
-		HOOK_PROC(glTextureStorage2D);
-		HOOK_PROC(glTextureStorage2DMultisample);
-		HOOK_PROC(glTextureStorage3D);
-		HOOK_PROC(glTextureStorage3DMultisample);
-		HOOK_PROC(glNamedBufferSubData);
-		HOOK_PROC(glTextureSubImage1D);
-		HOOK_PROC(glTextureSubImage2D);
-		HOOK_PROC(glTextureSubImage3D);
-		HOOK_PROC(glCompressedTextureSubImage1D);
-		HOOK_PROC(glCompressedTextureSubImage2D);
-		HOOK_PROC(glCompressedTextureSubImage3D);
-		HOOK_PROC(glCopyTextureSubImage1D);
-		HOOK_PROC(glCopyTextureSubImage2D);
-		HOOK_PROC(glCopyTextureSubImage3D);
-		HOOK_PROC(glMapNamedBuffer);
-		HOOK_PROC(glMapNamedBufferRange);
-		HOOK_PROC(glUnmapNamedBuffer);
-		HOOK_PROC(glCopyNamedBufferSubData);
-		HOOK_PROC(glNamedRenderbufferStorage);
-		HOOK_PROC(glNamedRenderbufferStorageMultisample);
-		HOOK_PROC(glClearNamedFramebufferiv);
-		HOOK_PROC(glClearNamedFramebufferuiv);
-		HOOK_PROC(glClearNamedFramebufferfv);
-		HOOK_PROC(glClearNamedFramebufferfi);
-		HOOK_PROC(glBlitNamedFramebuffer);
-		HOOK_PROC(glGenerateTextureMipmap);
-		HOOK_PROC(glBindTextureUnit);
-#endif
-
-		// GL_ARB_vertex_program / GL_ARB_fragment_program
-		HOOK_PROC(glBindProgramARB);
-		HOOK_PROC(glProgramStringARB);
-		HOOK_PROC(glDeleteProgramsARB);
-
-		// GL_EXT_framebuffer_object
-		HOOK_PROC(glBindFramebufferEXT);
-
-		// GL_EXT_direct_state_access
-		HOOK_PROC(glBindMultiTextureEXT);
 #endif
 
 		// WGL_ARB_create_context
