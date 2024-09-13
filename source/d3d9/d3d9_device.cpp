@@ -11,7 +11,6 @@
 #include "dll_log.hpp" // Include late to get 'hr_to_string' helper function
 #include "com_utils.hpp"
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 
 using reshade::d3d9::to_handle;
 

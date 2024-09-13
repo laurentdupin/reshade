@@ -8,7 +8,6 @@
 #include "opengl_impl_type_convert.hpp"
 #include "opengl_hooks.hpp" // Fix name clashes with gl3w
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 #include <cstring> // std::memset, std::strlen
 
 #define gl gl3wProcs.gl

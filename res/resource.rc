@@ -53,9 +53,6 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-#if defined(RESHADE_FXC) || defined(RESHADE_TEST_APPLICATION) || defined(APSTUDIO_INVOKED)
-MAIN_ICON               ICON                    "main_icon.ico"
-#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -63,7 +60,6 @@ MAIN_ICON               ICON                    "main_icon.ico"
 // RCDATA
 //
 
-#if !defined(RESHADE_FXC)
 IDB_MAIN_ICON           RCDATA                  "main_icon_small.png"
 
 IDR_COPY_PS             RCDATA                  "shaders\\copy_ps.cso"
@@ -115,7 +111,6 @@ IDR_LICENSE_UTFCPP      RCDATA                  "..\\deps\\utfcpp\\LICENSE"
 IDR_LICENSE_VMA         RCDATA                  "..\\deps\\vma\\LICENSE.txt"
 
 IDR_LICENSE_VULKAN      RCDATA                  "..\\deps\\vulkan\\LICENSE.md"
-#endif
 
 #endif    // Neutral (Default) resources
 /////////////////////////////////////////////////////////////////////////////

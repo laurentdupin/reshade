@@ -5,7 +5,6 @@
 
 #include "openxr_impl_swapchain.hpp"
 #include "dll_log.hpp"
-#include "addon_manager.hpp"
 #include "runtime_manager.hpp"
 #include <algorithm> // std::max
 

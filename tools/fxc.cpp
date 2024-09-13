@@ -3,9 +3,6 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include "effect_parser.hpp"
-#include "effect_codegen.hpp"
-#include "effect_preprocessor.hpp"
 #include "version.h"
 #include <fstream>
 #include <iostream>

@@ -13,13 +13,7 @@
 #include "d3d12/d3d12_command_queue.hpp"
 #include "d3d12/d3d12_impl_swapchain.hpp"
 #include "dll_log.hpp" // Include late to get 'hr_to_string' helper function
-#include "addon_manager.hpp"
 #include "runtime_manager.hpp"
-
-#if RESHADE_ADDON
-extern bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc);
-extern bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, HWND window);
-#endif
 
 extern UINT query_device(IUnknown *&device, com_ptr<IUnknown> &device_proxy);
 

@@ -7,7 +7,6 @@
 #include "dll_log.hpp"
 #include "ini_file.hpp"
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 #include <Windows.h>
 #include <Psapi.h>
 #ifndef NDEBUG

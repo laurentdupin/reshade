@@ -1704,10 +1704,6 @@ namespace reshade
 		/// To prevent the normal widget from being added to the overlay, return <see langword="true"/>, otherwise return <see langword="false"/>.
 		/// </remarks>
 		reshade_overlay_technique,
-
-#if RESHADE_ADDON
-		max = 95 // Last value used internally by ReShade to determine number of events in this enum
-#endif
 	};
 
 	template <addon_event ev>

@@ -8,7 +8,6 @@
 #include "opengl_impl_type_convert.hpp"
 #include "opengl_hooks.hpp" // Fix name clashes with gl3w
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 
 extern thread_local reshade::opengl::device_context_impl *g_opengl_context;
 

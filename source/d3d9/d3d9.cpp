@@ -8,7 +8,6 @@
 #include "d3d9_impl_type_convert.hpp"
 #include "dll_log.hpp" // Include late to get 'hr_to_string' helper function
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 
 // These are defined in d3d9.h, but are used as function names below
 #undef IDirect3D9_CreateDevice

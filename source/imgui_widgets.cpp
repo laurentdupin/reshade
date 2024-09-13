@@ -5,7 +5,6 @@
 
 #include "imgui_widgets.hpp"
 #include "input.hpp" // input::key_name
-#include "localization.hpp"
 #include "fonts/forkawesome.h"
 #include <cassert>
 #include <cwctype> // std::towlower
@@ -217,9 +216,9 @@ bool reshade::imgui::file_dialog(const char *name, std::filesystem::path &path, 
 	}
 
 	std::string select_button_label = ICON_FK_OK " ";
-	select_button_label += _("Select");
+	select_button_label += ("Select");
 	std::string cancel_button_label = ICON_FK_CANCEL " ";
-	cancel_button_label += _("Cancel");
+	cancel_button_label += ("Cancel");
 
 	ImGui::SameLine(0, button_spacing);
 	const bool select = ImGui::Button(select_button_label.c_str(), ImVec2(button_size, 0));
@@ -253,7 +252,7 @@ bool reshade::imgui::key_input_box(const char *name, unsigned int key[4], const 
 
 	ImGui::BeginDisabled(ImGui::GetCurrentContext()->NavInputSource == ImGuiInputSource_Gamepad);
 
-	ImGui::InputTextWithHint(name, _("Click to set keyboard shortcut"), buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoHorizontalScroll);
+	ImGui::InputTextWithHint(name, ("Click to set keyboard shortcut"), buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoHorizontalScroll);
 
 	if (ImGui::IsItemActive())
 	{
@@ -280,7 +279,7 @@ bool reshade::imgui::key_input_box(const char *name, unsigned int key[4], const 
 	}
 	else if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
 	{
-		ImGui::SetTooltip(_("Click in the field and press any key to change the shortcut to that key or press backspace to remove the shortcut."));
+		ImGui::SetTooltip(("Click in the field and press any key to change the shortcut to that key or press backspace to remove the shortcut."));
 	}
 
 	ImGui::EndDisabled();
@@ -323,7 +322,7 @@ bool reshade::imgui::search_input_box(char *filter, int filter_size, float width
 
 	const bool show_clear_button = filter[0] != '\0';
 
-	std::string hint = _("Search");
+	std::string hint = ("Search");
 	hint += " " ICON_FK_SEARCH;
 
 	ImGui::SetNextItemWidth(width - (show_clear_button ? ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x : 0.0001f));
@@ -526,7 +525,7 @@ bool reshade::imgui::confirm_button(const char *label, float width, const char *
 
 		std::string button_label;
 		button_label = ICON_FK_OK " ";
-		button_label += _("Yes");
+		button_label += ("Yes");
 
 		if (ImGui::Button(button_label.c_str(), ImVec2(button_width, 0)))
 		{
@@ -537,7 +536,7 @@ bool reshade::imgui::confirm_button(const char *label, float width, const char *
 		ImGui::SameLine();
 
 		button_label = ICON_FK_CANCEL " ";
-		button_label += _("No");
+		button_label += ("No");
 
 		if (ImGui::Button(button_label.c_str(), ImVec2(button_width, 0)))
 		{
@@ -648,7 +647,7 @@ bool reshade::imgui::list_with_buttons(const char *label, const std::string_view
 
 bool reshade::imgui::combo_with_buttons(const char *label, bool *v)
 {
-	std::string items = _("Off\nOn\n");
+	std::string items = ("Off\nOn\n");
 	std::replace(items.begin(), items.end(), '\n', '\0');
 
 	int current_item = *v ? 1 : 0;

@@ -7,7 +7,6 @@
 #include "d3d12_command_list.hpp"
 #include "d3d12_command_queue.hpp"
 #include "d3d12_command_queue_downlevel.hpp"
-#include "addon_manager.hpp"
 #include "runtime_manager.hpp"
 #include <algorithm> // std::find
 

@@ -11,7 +11,6 @@
 #include "d3d12/d3d12_command_queue.hpp"
 #include "opengl/opengl_impl_device_context.hpp"
 #include "dll_log.hpp"
-#include "addon_manager.hpp"
 #include "runtime_manager.hpp"
 #include <cmath> // std::abs, std::ceil, std::floor
 #include <algorithm> // std::max, std::min

@@ -8,7 +8,6 @@
 #include "vulkan_impl_command_list.hpp"
 #include "vulkan_impl_type_convert.hpp"
 #include "dll_log.hpp"
-#include "addon_manager.hpp"
 #include "lockfree_linear_map.hpp"
 #include <cstring> // std::memcpy, std::memset
 #include <algorithm> // std::copy_n, std::max, std::min, std::swap

@@ -14,7 +14,6 @@
 #include "dll_log.hpp" // Include late to get 'hr_to_string' helper function
 #include "com_utils.hpp"
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 #include <cwchar> // std::wcslen
 #include <algorithm> // std::find_if
 #include <utf8/unchecked.h>

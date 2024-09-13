@@ -10,8 +10,6 @@
 #include "dll_log.hpp"
 #include "dll_resources.hpp"
 #include "imgui_widgets.hpp"
-#include "localization.hpp"
-#include "addon_manager.hpp"
 #include "vulkan/vulkan_impl_device.hpp"
 #include <openvr.h>
 #include <ivrclientcore.h>
@@ -100,10 +98,6 @@ void reshade::runtime::deinit_gui_vr()
 
 void reshade::runtime::draw_gui_vr()
 {
-#if RESHADE_FX
-	_gather_gpu_statistics = false;
-#endif
-
 	if (s_main_handle == vr::k_ulOverlayHandleInvalid || !s_vr_overlay->IsOverlayVisible(s_main_handle))
 		return;
 
@@ -194,22 +188,11 @@ void reshade::runtime::draw_gui_vr()
 		s_vr_overlay->SetKeyboardPositionForOverlay(s_main_handle, vr::HmdRect2_t { { 0.0f, 1.0f }, { 1.0f, 0.0f } });
 	}
 
-#if RESHADE_LOCALIZATION
-	const std::string prev_language = resources::set_current_language(_selected_language);
-	_current_language = resources::get_current_language();
-#endif
-
 	const std::pair<std::string, void(runtime::*)()> overlay_callbacks[] = {
-#if RESHADE_FX
-		{ _("Home###home"), &runtime::draw_gui_home },
-#endif
-#if RESHADE_ADDON
-		{ _("Add-ons###addons"), &runtime::draw_gui_addons },
-#endif
-		{ _("Settings###settings"), &runtime::draw_gui_settings },
-		{ _("Statistics###statistics"), &runtime::draw_gui_statistics },
-		{ _("Log###log"), &runtime::draw_gui_log },
-		{ _("About###about"), &runtime::draw_gui_about }
+		{ ("Settings###settings"), &runtime::draw_gui_settings },
+		{ ("Statistics###statistics"), &runtime::draw_gui_statistics },
+		{ ("Log###log"), &runtime::draw_gui_log },
+		{ ("About###about"), &runtime::draw_gui_about }
 	};
 
 	const ImGuiViewport *const viewport = ImGui::GetMainViewport();
@@ -295,10 +278,6 @@ void reshade::runtime::draw_gui_vr()
 	ImGui::GetStateStorage()->SetInt(ImGui::GetID("##overlay_index"), selected_overlay_index);
 
 	ImGui::End(); // VR Viewport window
-
-#if RESHADE_LOCALIZATION
-	resources::set_current_language(prev_language);
-#endif
 
 	ImGui::Render();
 

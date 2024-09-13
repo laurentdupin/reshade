@@ -81,18 +81,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="examples\09-depth\generic_depth_addon.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="examples\15-effect_runtime_sync\runtime_sync_addon.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="source\addon.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="source\addon_manager.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
     <ClCompile Include="source\d2d1\d2d1.cpp">
       <Filter>hooks\d2d1</Filter>
     </ClCompile>
@@ -282,9 +270,6 @@
     <ClCompile Include="source\hook_manager.cpp">
       <Filter>core\hook</Filter>
     </ClCompile>
-    <ClCompile Include="source\imgui_code_editor.cpp">
-      <Filter>core\utils</Filter>
-    </ClCompile>
     <ClCompile Include="source\imgui_function_table.cpp">
       <Filter>core\utils</Filter>
     </ClCompile>
@@ -461,12 +446,6 @@
     <ClInclude Include="res\version.h">
       <Filter>resources</Filter>
     </ClInclude>
-    <ClInclude Include="source\addon.hpp">
-      <Filter>core\runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="source\addon_manager.hpp">
-      <Filter>core\runtime</Filter>
-    </ClInclude>
     <ClInclude Include="source\com_ptr.hpp">
       <Filter>core\utils</Filter>
     </ClInclude>
@@ -620,9 +599,6 @@
     <ClInclude Include="source\hook_manager.hpp">
       <Filter>core\hook</Filter>
     </ClInclude>
-    <ClInclude Include="source\imgui_code_editor.hpp">
-      <Filter>core\utils</Filter>
-    </ClInclude>
     <ClInclude Include="source\imgui_function_table_18600.hpp">
       <Filter>core\utils</Filter>
     </ClInclude>
@@ -646,9 +622,6 @@
     </ClInclude>
     <ClInclude Include="source\input_gamepad.hpp">
       <Filter>core\runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="source\localization.hpp">
-      <Filter>core\utils</Filter>
     </ClInclude>
     <ClInclude Include="source\lockfree_linear_map.hpp">
       <Filter>core\utils</Filter>
