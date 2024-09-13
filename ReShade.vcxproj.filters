@@ -285,9 +285,6 @@
     <ClCompile Include="source\imgui_widgets.cpp">
       <Filter>core\utils</Filter>
     </ClCompile>
-    <ClCompile Include="source\ini_file.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
     <ClCompile Include="source\input.cpp">
       <Filter>core\runtime</Filter>
     </ClCompile>
@@ -601,9 +598,6 @@
     </ClInclude>
     <ClInclude Include="source\imgui_widgets.hpp">
       <Filter>core\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="source\ini_file.hpp">
-      <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="source\input.hpp">
       <Filter>core\runtime</Filter>

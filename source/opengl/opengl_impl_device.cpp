@@ -7,7 +7,6 @@
 #include "opengl_impl_type_convert.hpp"
 #include "dll_log.hpp"
 #include "dll_resources.hpp"
-#include "ini_file.hpp"
 #include <cstdio> // std::sscanf
 #include <cstring> // std::memcpy, std::strcmp, std::strncmp, std::strncpy
 #include <algorithm> // std::copy_n, std::fill_n, std::max
@@ -101,13 +100,14 @@ reshade::opengl::device_impl::device_impl(HDC initial_hdc, HGLRC shared_hglrc, b
 	// - Call of Duty: United Offensive uses buffer names in range 0-2500
 	// - Star Wars Jedi Knight II: Jedi Outcast uses texture names in range 2000-3000
 	unsigned int num_reserve_buffer_names = _compatibility_context ? 4000 : 0;
-	reshade::global_config().get("APP", "ReserveBufferNames", num_reserve_buffer_names);
 	_reserved_buffer_names.resize(num_reserve_buffer_names);
+
 	if (!_reserved_buffer_names.empty())
 		gl.GenBuffers(static_cast<GLsizei>(_reserved_buffer_names.size()), _reserved_buffer_names.data());
+
 	unsigned int num_reserve_texture_names = _compatibility_context ? 4000 : 0;
-	reshade::global_config().get("APP", "ReserveTextureNames", num_reserve_texture_names);
 	_reserved_texture_names.resize(num_reserve_texture_names);
+
 	if (!_reserved_texture_names.empty())
 		gl.GenTextures(static_cast<GLsizei>(_reserved_texture_names.size()), _reserved_texture_names.data());
 

@@ -10,7 +10,6 @@
 #include "version.h"
 #include "dll_log.hpp"
 #include "dll_resources.hpp"
-#include "ini_file.hpp"
 #include "input.hpp"
 #include "imgui_widgets.hpp"
 #include "platform_utils.hpp"
@@ -264,351 +263,6 @@ void reshade::runtime::build_font_atlas()
 	_device->set_resource_name(_font_atlas_tex, "ImGui font atlas");
 }
 
-void reshade::runtime::load_config_gui(const ini_file &config)
-{
-	if (_input_gamepad != nullptr)
-		_imgui_context->IO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-	else
-		_imgui_context->IO.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
-
-	const auto config_get = [&config](const std::string &section, const std::string &key, auto &values) {
-		if (config.get(section, key, values))
-			return true;
-		// Fall back to global configuration when an entry does not exist in the local configuration
-		return global_config().get(section, key, values);
-	};
-
-	config_get("INPUT", "KeyOverlay", _overlay_key_data);
-	config_get("INPUT", "KeyFPS", _fps_key_data);
-	config_get("INPUT", "KeyFrameTime", _frametime_key_data);
-	config_get("INPUT", "InputProcessing", _input_processing_mode);
-
-	config.get("OVERLAY", "ClockFormat", _clock_format);
-	config.get("OVERLAY", "FPSPosition", _fps_pos);
-	config.get("OVERLAY", "NoFontScaling", _no_font_scaling);
-	config.get("OVERLAY", "ShowClock", _show_clock);
-	config.get("OVERLAY", "ShowFPS", _show_fps);
-	config.get("OVERLAY", "ShowFrameTime", _show_frametime);
-	config.get("OVERLAY", "ShowPresetName", _show_preset_name);
-	config.get("OVERLAY", "ShowScreenshotMessage", _show_screenshot_message);
-
-	ImGuiStyle &imgui_style = _imgui_context->Style;
-	config.get("STYLE", "Alpha", imgui_style.Alpha);
-	config.get("STYLE", "ChildRounding", imgui_style.ChildRounding);
-	config.get("STYLE", "ColFPSText", _fps_col);
-	config.get("STYLE", "EditorFont", _editor_font_path);
-	config.get("STYLE", "EditorFontSize", _editor_font_size);
-	config.get("STYLE", "EditorStyleIndex", _editor_style_index);
-	config.get("STYLE", "Font", _font_path);
-	config.get("STYLE", "FontSize", _font_size);
-	config.get("STYLE", "FPSScale", _fps_scale);
-	config.get("STYLE", "FrameRounding", imgui_style.FrameRounding);
-	config.get("STYLE", "GrabRounding", imgui_style.GrabRounding);
-	config.get("STYLE", "LatinFont", _latin_font_path);
-	config.get("STYLE", "PopupRounding", imgui_style.PopupRounding);
-	config.get("STYLE", "ScrollbarRounding", imgui_style.ScrollbarRounding);
-	config.get("STYLE", "StyleIndex", _style_index);
-	config.get("STYLE", "TabRounding", imgui_style.TabRounding);
-	config.get("STYLE", "WindowRounding", imgui_style.WindowRounding);
-	config.get("STYLE", "HdrOverlayBrightness", _hdr_overlay_brightness);
-	config.get("STYLE", "HdrOverlayOverwriteColorSpaceTo", reinterpret_cast<int &>(_hdr_overlay_overwrite_color_space));
-
-	// For compatibility with older versions, set the alpha value if it is missing
-	if (_fps_col[3] == 0.0f)
-		_fps_col[3]  = 1.0f;
-
-	load_custom_style();
-
-	if (_imgui_context->SettingsLoaded)
-		return;
-
-	ImGuiContext *const backup_context = ImGui::GetCurrentContext();
-	ImGui::SetCurrentContext(_imgui_context);
-
-	// Call all pre-read handlers, before reading config data (since they affect state that is then updated in the read handlers below)
-	for (ImGuiSettingsHandler &handler : _imgui_context->SettingsHandlers)
-		if (handler.ReadInitFn)
-			handler.ReadInitFn(_imgui_context, &handler);
-
-	for (ImGuiSettingsHandler &handler : _imgui_context->SettingsHandlers)
-	{
-		if (std::vector<std::string> lines;
-			config.get("OVERLAY", handler.TypeName, lines))
-		{
-			void *entry_data = nullptr;
-
-			for (const std::string &line : lines)
-			{
-				if (line.empty())
-					continue;
-
-				if (line[0] == '[')
-				{
-					const size_t name_beg = line.find('[', 1) + 1;
-					const size_t name_end = line.rfind(']');
-
-					entry_data = handler.ReadOpenFn(_imgui_context, &handler, line.substr(name_beg, name_end - name_beg).c_str());
-				}
-				else
-				{
-					assert(entry_data != nullptr);
-					handler.ReadLineFn(_imgui_context, &handler, entry_data, line.c_str());
-				}
-			}
-		}
-	}
-
-	_imgui_context->SettingsLoaded = true;
-
-	for (ImGuiSettingsHandler &handler : _imgui_context->SettingsHandlers)
-		if (handler.ApplyAllFn)
-			handler.ApplyAllFn(_imgui_context, &handler);
-
-	ImGui::SetCurrentContext(backup_context);
-}
-void reshade::runtime::save_config_gui(ini_file &config) const
-{
-	config.set("INPUT", "KeyOverlay", _overlay_key_data);
-	config.set("INPUT", "KeyFPS", _fps_key_data);
-	config.set("INPUT", "KeyFrametime", _frametime_key_data);
-	config.set("INPUT", "InputProcessing", _input_processing_mode);
-
-	config.set("OVERLAY", "ClockFormat", _clock_format);
-	config.set("OVERLAY", "FPSPosition", _fps_pos);
-	config.set("OVERLAY", "ShowClock", _show_clock);
-	config.set("OVERLAY", "ShowFPS", _show_fps);
-	config.set("OVERLAY", "ShowFrameTime", _show_frametime);
-	config.set("OVERLAY", "ShowPresetName", _show_preset_name);
-	config.set("OVERLAY", "ShowScreenshotMessage", _show_screenshot_message);
-
-	const ImGuiStyle &imgui_style = _imgui_context->Style;
-	config.set("STYLE", "Alpha", imgui_style.Alpha);
-	config.set("STYLE", "ChildRounding", imgui_style.ChildRounding);
-	config.set("STYLE", "ColFPSText", _fps_col);
-	config.set("STYLE", "EditorFont", _editor_font_path);
-	config.set("STYLE", "EditorFontSize", _editor_font_size);
-	config.set("STYLE", "EditorStyleIndex", _editor_style_index);
-	config.set("STYLE", "Font", _font_path);
-	config.set("STYLE", "FontSize", _font_size);
-	config.set("STYLE", "FPSScale", _fps_scale);
-	config.set("STYLE", "FrameRounding", imgui_style.FrameRounding);
-	config.set("STYLE", "GrabRounding", imgui_style.GrabRounding);
-	config.set("STYLE", "LatinFont", _latin_font_path);
-	config.set("STYLE", "PopupRounding", imgui_style.PopupRounding);
-	config.set("STYLE", "ScrollbarRounding", imgui_style.ScrollbarRounding);
-	config.set("STYLE", "StyleIndex", _style_index);
-	config.set("STYLE", "TabRounding", imgui_style.TabRounding);
-	config.set("STYLE", "WindowRounding", imgui_style.WindowRounding);
-	config.set("STYLE", "HdrOverlayBrightness", _hdr_overlay_brightness);
-	config.set("STYLE", "HdrOverlayOverwriteColorSpaceTo", static_cast<int>(_hdr_overlay_overwrite_color_space));
-
-	// Do not save custom style colors by default, only when actually used and edited
-
-	ImGuiContext *const backup_context = ImGui::GetCurrentContext();
-	ImGui::SetCurrentContext(_imgui_context);
-
-	for (ImGuiSettingsHandler &handler : _imgui_context->SettingsHandlers)
-	{
-		ImGuiTextBuffer buffer;
-		handler.WriteAllFn(_imgui_context, &handler, &buffer);
-
-		std::vector<std::string> lines;
-		for (int i = 0, offset = 0; i < buffer.size(); ++i)
-		{
-			if (buffer[i] == '\n')
-			{
-				lines.emplace_back(buffer.c_str() + offset, i - offset);
-				offset = i + 1;
-			}
-		}
-
-		if (!lines.empty())
-			config.set("OVERLAY", handler.TypeName, lines);
-	}
-
-	ImGui::SetCurrentContext(backup_context);
-}
-
-void reshade::runtime::load_custom_style()
-{
-	const ini_file &config = ini_file::load_cache(_config_path);
-
-	ImVec4 *const colors = _imgui_context->Style.Colors;
-	switch (_style_index)
-	{
-	case 0:
-		ImGui::StyleColorsDark(&_imgui_context->Style);
-		break;
-	case 1:
-		ImGui::StyleColorsLight(&_imgui_context->Style);
-		break;
-	case 2:
-		colors[ImGuiCol_Text] = ImVec4(0.862745f, 0.862745f, 0.862745f, 1.00f);
-		colors[ImGuiCol_TextDisabled] = ImVec4(0.862745f, 0.862745f, 0.862745f, 0.58f);
-		colors[ImGuiCol_WindowBg] = ImVec4(0.117647f, 0.117647f, 0.117647f, 1.00f);
-		colors[ImGuiCol_ChildBg] = ImVec4(0.156863f, 0.156863f, 0.156863f, 0.00f);
-		colors[ImGuiCol_Border] = ImVec4(0.862745f, 0.862745f, 0.862745f, 0.30f);
-		colors[ImGuiCol_FrameBg] = ImVec4(0.156863f, 0.156863f, 0.156863f, 1.00f);
-		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.470588f);
-		colors[ImGuiCol_FrameBgActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.588235f);
-		colors[ImGuiCol_TitleBg] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.45f);
-		colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.35f);
-		colors[ImGuiCol_TitleBgActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.58f);
-		colors[ImGuiCol_MenuBarBg] = ImVec4(0.156863f, 0.156863f, 0.156863f, 0.57f);
-		colors[ImGuiCol_ScrollbarBg] = ImVec4(0.156863f, 0.156863f, 0.156863f, 1.00f);
-		colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.31f);
-		colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.78f);
-		colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_PopupBg] = ImVec4(0.117647f, 0.117647f, 0.117647f, 0.92f);
-		colors[ImGuiCol_CheckMark] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.80f);
-		colors[ImGuiCol_SliderGrab] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.784314f);
-		colors[ImGuiCol_SliderGrabActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_Button] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.44f);
-		colors[ImGuiCol_ButtonHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.86f);
-		colors[ImGuiCol_ButtonActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_Header] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.76f);
-		colors[ImGuiCol_HeaderHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.86f);
-		colors[ImGuiCol_HeaderActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_Separator] = ImVec4(0.862745f, 0.862745f, 0.862745f, 0.32f);
-		colors[ImGuiCol_SeparatorHovered] = ImVec4(0.862745f, 0.862745f, 0.862745f, 0.78f);
-		colors[ImGuiCol_SeparatorActive] = ImVec4(0.862745f, 0.862745f, 0.862745f, 1.00f);
-		colors[ImGuiCol_ResizeGrip] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.20f);
-		colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.78f);
-		colors[ImGuiCol_ResizeGripActive] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_Tab] = colors[ImGuiCol_Button];
-		colors[ImGuiCol_TabActive] = colors[ImGuiCol_ButtonActive];
-		colors[ImGuiCol_TabHovered] = colors[ImGuiCol_ButtonHovered];
-		colors[ImGuiCol_TabUnfocused] = ImLerp(colors[ImGuiCol_Tab], colors[ImGuiCol_TitleBg], 0.80f);
-		colors[ImGuiCol_TabUnfocusedActive] = ImLerp(colors[ImGuiCol_TabActive], colors[ImGuiCol_TitleBg], 0.40f);
-		colors[ImGuiCol_DockingPreview] = colors[ImGuiCol_Header] * ImVec4(1.0f, 1.0f, 1.0f, 0.7f);
-		colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-		colors[ImGuiCol_PlotLines] = ImVec4(0.862745f, 0.862745f, 0.862745f, 0.63f);
-		colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_PlotHistogram] = ImVec4(0.862745f, 0.862745f, 0.862745f, 0.63f);
-		colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.392157f, 0.588235f, 0.941176f, 1.00f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.392157f, 0.588235f, 0.941176f, 0.43f);
-		break;
-	case 5:
-		colors[ImGuiCol_Text] = ImColor(0xff969483);
-		colors[ImGuiCol_TextDisabled] = ImColor(0xff756e58);
-		colors[ImGuiCol_WindowBg] = ImColor(0xff362b00);
-		colors[ImGuiCol_ChildBg] = ImColor();
-		colors[ImGuiCol_PopupBg] = ImColor(0xfc362b00); // Customized
-		colors[ImGuiCol_Border] = ImColor(0xff423607);
-		colors[ImGuiCol_BorderShadow] = ImColor();
-		colors[ImGuiCol_FrameBg] = ImColor(0xfc423607); // Customized
-		colors[ImGuiCol_FrameBgHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_FrameBgActive] = ImColor(0xff423607);
-		colors[ImGuiCol_TitleBg] = ImColor(0xff362b00);
-		colors[ImGuiCol_TitleBgActive] = ImColor(0xff362b00);
-		colors[ImGuiCol_TitleBgCollapsed] = ImColor(0xff362b00);
-		colors[ImGuiCol_MenuBarBg] = ImColor(0xff423607);
-		colors[ImGuiCol_ScrollbarBg] = ImColor(0xff362b00);
-		colors[ImGuiCol_ScrollbarGrab] = ImColor(0xff423607);
-		colors[ImGuiCol_ScrollbarGrabHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_ScrollbarGrabActive] = ImColor(0xff423607);
-		colors[ImGuiCol_CheckMark] = ImColor(0xff756e58);
-		colors[ImGuiCol_SliderGrab] = ImColor(0xff5e5025); // Customized
-		colors[ImGuiCol_SliderGrabActive] = ImColor(0xff5e5025); // Customized
-		colors[ImGuiCol_Button] = ImColor(0xff423607);
-		colors[ImGuiCol_ButtonHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_ButtonActive] = ImColor(0xff362b00);
-		colors[ImGuiCol_Header] = ImColor(0xff423607);
-		colors[ImGuiCol_HeaderHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_HeaderActive] = ImColor(0xff423607);
-		colors[ImGuiCol_Separator] = ImColor(0xff423607);
-		colors[ImGuiCol_SeparatorHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_SeparatorActive] = ImColor(0xff423607);
-		colors[ImGuiCol_ResizeGrip] = ImColor(0xff423607);
-		colors[ImGuiCol_ResizeGripHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_ResizeGripActive] = ImColor(0xff756e58);
-		colors[ImGuiCol_Tab] = ImColor(0xff362b00);
-		colors[ImGuiCol_TabHovered] = ImColor(0xff423607);
-		colors[ImGuiCol_TabActive] = ImColor(0xff423607);
-		colors[ImGuiCol_TabUnfocused] = ImColor(0xff362b00);
-		colors[ImGuiCol_TabUnfocusedActive] = ImColor(0xff423607);
-		colors[ImGuiCol_DockingPreview] = ImColor(0xee837b65); // Customized
-		colors[ImGuiCol_DockingEmptyBg] = ImColor();
-		colors[ImGuiCol_PlotLines] = ImColor(0xff756e58);
-		colors[ImGuiCol_PlotLinesHovered] = ImColor(0xff756e58);
-		colors[ImGuiCol_PlotHistogram] = ImColor(0xff756e58);
-		colors[ImGuiCol_PlotHistogramHovered] = ImColor(0xff756e58);
-		colors[ImGuiCol_TextSelectedBg] = ImColor(0xff756e58);
-		colors[ImGuiCol_DragDropTarget] = ImColor(0xff756e58);
-		colors[ImGuiCol_NavHighlight] = ImColor();
-		colors[ImGuiCol_NavWindowingHighlight] = ImColor(0xee969483); // Customized
-		colors[ImGuiCol_NavWindowingDimBg] = ImColor(0x20e3f6fd); // Customized
-		colors[ImGuiCol_ModalWindowDimBg] = ImColor(0x20e3f6fd); // Customized
-		break;
-	case 6:
-		colors[ImGuiCol_Text] = ImColor(0xff837b65);
-		colors[ImGuiCol_TextDisabled] = ImColor(0xffa1a193);
-		colors[ImGuiCol_WindowBg] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_ChildBg] = ImColor();
-		colors[ImGuiCol_PopupBg] = ImColor(0xfce3f6fd); // Customized
-		colors[ImGuiCol_Border] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_BorderShadow] = ImColor();
-		colors[ImGuiCol_FrameBg] = ImColor(0xfcd5e8ee); // Customized
-		colors[ImGuiCol_FrameBgHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_FrameBgActive] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_TitleBg] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_TitleBgActive] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_TitleBgCollapsed] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_MenuBarBg] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ScrollbarBg] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_ScrollbarGrab] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ScrollbarGrabHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ScrollbarGrabActive] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_CheckMark] = ImColor(0xffa1a193);
-		colors[ImGuiCol_SliderGrab] = ImColor(0xffc3d3d9); // Customized
-		colors[ImGuiCol_SliderGrabActive] = ImColor(0xffc3d3d9); // Customized
-		colors[ImGuiCol_Button] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ButtonHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ButtonActive] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_Header] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_HeaderHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_HeaderActive] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_Separator] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_SeparatorHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_SeparatorActive] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ResizeGrip] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ResizeGripHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_ResizeGripActive] = ImColor(0xffa1a193);
-		colors[ImGuiCol_Tab] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_TabHovered] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_TabActive] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_TabUnfocused] = ImColor(0xffe3f6fd);
-		colors[ImGuiCol_TabUnfocusedActive] = ImColor(0xffd5e8ee);
-		colors[ImGuiCol_DockingPreview] = ImColor(0xeea1a193); // Customized
-		colors[ImGuiCol_DockingEmptyBg] = ImColor();
-		colors[ImGuiCol_PlotLines] = ImColor(0xffa1a193);
-		colors[ImGuiCol_PlotLinesHovered] = ImColor(0xffa1a193);
-		colors[ImGuiCol_PlotHistogram] = ImColor(0xffa1a193);
-		colors[ImGuiCol_PlotHistogramHovered] = ImColor(0xffa1a193);
-		colors[ImGuiCol_TextSelectedBg] = ImColor(0xffa1a193);
-		colors[ImGuiCol_DragDropTarget] = ImColor(0xffa1a193);
-		colors[ImGuiCol_NavHighlight] = ImColor();
-		colors[ImGuiCol_NavWindowingHighlight] = ImColor(0xee837b65); // Customized
-		colors[ImGuiCol_NavWindowingDimBg] = ImColor(0x20362b00); // Customized
-		colors[ImGuiCol_ModalWindowDimBg] = ImColor(0x20362b00); // Customized
-		break;
-	default:
-		for (ImGuiCol i = 0; i < ImGuiCol_COUNT; i++)
-			config.get("STYLE", ImGui::GetStyleColorName(i), (float(&)[4])colors[i]);
-		break;
-	}
-}
-void reshade::runtime::save_custom_style() const
-{
-	ini_file &config = ini_file::load_cache(_config_path);
-
-	if (_style_index == 3 || _style_index == 4) // Custom Simple, Custom Advanced
-	{
-		for (ImGuiCol i = 0; i < ImGuiCol_COUNT; i++)
-			config.set("STYLE", ImGui::GetStyleColorName(i), (const float(&)[4])_imgui_context->Style.Colors[i]);
-	}
-}
-
 void reshade::runtime::draw_gui()
 {
 	assert(_is_initialized);
@@ -638,9 +292,8 @@ void reshade::runtime::draw_gui()
 	const bool show_splash_window = _show_splash && (_last_present_time - _last_reload_time) < std::chrono::seconds(5);
 
 	// Do not show this message in the same frame the screenshot is taken (so that it won't show up on the GUI screenshot)
-	const bool show_screenshot_message = (_show_screenshot_message || !_last_screenshot_save_successful) && !_should_save_screenshot && (_last_present_time - _last_screenshot_time) < std::chrono::seconds(_last_screenshot_save_successful ? 3 : 5);
 	const bool show_preset_transition_message = false;
-	const bool show_message_window = show_screenshot_message || show_preset_transition_message || !_preset_save_successful;
+	const bool show_message_window = show_preset_transition_message || !_preset_save_successful;
 
 	const bool show_clock = _show_clock == 1 || (_show_overlay && _show_clock > 1);
 	const bool show_fps = _show_fps == 1 || (_show_overlay && _show_fps > 1);
@@ -676,7 +329,7 @@ void reshade::runtime::draw_gui()
 
 	if (_input != nullptr)
 	{
-		imgui_io.MouseDrawCursor = _show_overlay && (!_should_save_screenshot || !_screenshot_save_gui);
+		imgui_io.MouseDrawCursor = _show_overlay;
 
 		// Scale mouse position in case render resolution does not match the window size
 		unsigned int max_position[2];
@@ -891,21 +544,6 @@ void reshade::runtime::draw_gui()
 			ImGuiWindowFlags_NoDocking |
 			ImGuiWindowFlags_NoFocusOnAppearing);
 
-		if (!_preset_save_successful)
-		{
-			ImGui::TextColored(COLOR_RED, ("Unable to save configuration. Make sure file permissions are set up to allow writing to %s."), _config_path.u8string().c_str());
-		}
-		else if (show_screenshot_message)
-		{
-			if (!_last_screenshot_save_successful)
-				if (_screenshot_directory_creation_successful)
-					ImGui::TextColored(COLOR_RED, ("Unable to save screenshot because of an internal error (the format may not be supported or the drive may be full)."));
-				else
-					ImGui::TextColored(COLOR_RED, ("Unable to save screenshot because path could not be created: %s"), (g_reshade_base_path / _screenshot_path).u8string().c_str());
-			else
-				ImGui::Text(("Screenshot successfully saved to %s"), _last_screenshot_file.u8string().c_str());
-		}
-
 		viewport_offset.y += ImGui::GetWindowHeight() + _imgui_context->Style.WindowPadding.x; // Add small space between windows
 
 		ImGui::End();
@@ -1001,8 +639,6 @@ void reshade::runtime::draw_gui()
 			_font_size = ImClamp(_font_size + static_cast<int>(imgui_io.MouseWheel), 8, 64);
 			_editor_font_size = ImClamp(_editor_font_size + static_cast<int>(imgui_io.MouseWheel), 8, 64);
 			imgui_io.Fonts->TexReady = false;
-			save_config();
-
 			_is_font_scaling = true;
 		}
 

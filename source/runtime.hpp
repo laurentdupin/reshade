@@ -33,7 +33,7 @@ namespace reshade
 	class __declspec(uuid("77FF8202-5BEC-42AD-8CE0-397F3E84EAA6")) runtime : public api::effect_runtime
 	{
 	public:
-		runtime(api::swapchain *swapchain, api::command_queue *graphics_queue, const std::filesystem::path &config_path, bool is_vr);
+		runtime(api::swapchain *swapchain, api::command_queue *graphics_queue);
 		~runtime();
 
 		bool on_init();
@@ -54,11 +54,6 @@ namespace reshade
 		api::resource get_back_buffer(uint32_t index) final { return _swapchain->get_back_buffer(index); }
 		uint32_t get_back_buffer_count() const final { return _swapchain->get_back_buffer_count(); }
 		uint32_t get_current_back_buffer_index() const final { return _swapchain->get_current_back_buffer_index(); }
-
-		/// <summary>
-		/// Gets the path to the configuration file used by this effect runtime.
-		/// </summary>
-		const std::filesystem::path &get_config_path() const { return _config_path; }
 
 		void render_effects(api::command_list *cmd_list, api::resource_view rtv, api::resource_view rtv_srgb) final;
 		void render_technique(api::effect_technique handle, api::command_list *cmd_list, api::resource_view rtv, api::resource_view rtv_srgb) final;
@@ -167,11 +162,6 @@ namespace reshade
 		void reload_effect_next_frame(const char *effect_name) final;
 
 	private:
-		void load_config();
-		void save_config() const;
-
-		void save_current_preset() const final {}
-
 		bool get_texture_data(api::resource resource, api::resource_usage state, uint8_t *pixels);
 
 		bool execute_screenshot_post_save_command(const std::filesystem::path &screenshot_path, unsigned int screenshot_count);
@@ -191,7 +181,6 @@ namespace reshade
 		#pragma region Status
 		bool _is_initialized = false;
 		bool _preset_save_successful = true;
-		std::filesystem::path _config_path;
 
 		bool _ignore_shortcuts = false;
 		bool _force_shortcut_modifiers = true;
@@ -221,30 +210,6 @@ namespace reshade
 
 		api::fence _queue_sync_fence = {};
 		uint64_t _queue_sync_value = 0;
-		#pragma endregion
-
-		#pragma region Screenshot
-#if RESHADE_GUI
-		bool _screenshot_save_gui = false;
-#endif
-		bool _screenshot_clear_alpha = true;
-		unsigned int _screenshot_count = 0;
-		unsigned int _screenshot_format = 1;
-		unsigned int _screenshot_jpeg_quality = 90;
-		unsigned int _screenshot_key_data[4] = {};
-		std::filesystem::path _screenshot_sound_path;
-		std::filesystem::path _screenshot_path;
-		std::string _screenshot_name;
-		std::filesystem::path _screenshot_post_save_command;
-		std::string _screenshot_post_save_command_arguments;
-		std::filesystem::path _screenshot_post_save_command_working_directory;
-		bool _screenshot_post_save_command_hide_window = false;
-
-		bool _should_save_screenshot = false;
-		std::atomic<bool> _last_screenshot_save_successful = true;
-		bool _screenshot_directory_creation_successful = true;
-		std::filesystem::path _last_screenshot_file;
-		std::chrono::high_resolution_clock::time_point _last_screenshot_time;
 		#pragma endregion
 
 #if RESHADE_GUI

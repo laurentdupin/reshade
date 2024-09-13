@@ -754,11 +754,6 @@ namespace reshade { namespace api
 		}
 
 		/// <summary>
-		/// Saves the current preset with the current state of the loaded techniques and uniform variables.
-		/// </summary>
-		virtual void save_current_preset() const = 0;
-
-		/// <summary>
 		/// Gets the value of a preprocessor definition for the specified effect.
 		/// </summary>
 		/// <param name="effect_name">File name of the effect file the preprocessor definition is defined for.</param>

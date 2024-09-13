@@ -8,7 +8,6 @@
 #include "version.h"
 #include "dll_log.hpp"
 #include "dll_resources.hpp"
-#include "ini_file.hpp"
 #include "input.hpp"
 #include "com_ptr.hpp"
 #include "platform_utils.hpp"
@@ -32,10 +31,6 @@
 
 bool resolve_path(std::filesystem::path &path, std::error_code &ec)
 {
-	// First convert path to an absolute path
-	// Ignore the working directory and instead start relative paths at the DLL location
-	if (path.is_relative())
-		path = g_reshade_base_path / path;
 	// Finally try to canonicalize the path too
 	if (std::filesystem::path canonical_path = std::filesystem::canonical(path, ec); !ec)
 		path = std::move(canonical_path);
@@ -44,18 +39,13 @@ bool resolve_path(std::filesystem::path &path, std::error_code &ec)
 	return !ec; // The canonicalization step fails if the path does not exist
 }
 
-reshade::runtime::runtime(api::swapchain *swapchain, api::command_queue *graphics_queue, const std::filesystem::path &config_path, bool is_vr) :
+reshade::runtime::runtime(api::swapchain *swapchain, api::command_queue *graphics_queue) :
 	_swapchain(swapchain),
 	_device(swapchain->get_device()),
 	_graphics_queue(graphics_queue),
 	_start_time(std::chrono::high_resolution_clock::now()),
 	_last_present_time(_start_time),
-	_last_frame_duration(std::chrono::milliseconds(1)),
-	_config_path(config_path),
-	_screenshot_path(L".\\"),
-	_screenshot_name("%AppName% %Date% %Time%"),
-	_screenshot_post_save_command_arguments("\"%TargetPath%\""),
-	_screenshot_post_save_command_working_directory(L".\\")
+	_last_frame_duration(std::chrono::milliseconds(1))
 {
 	assert(swapchain != nullptr && graphics_queue != nullptr);
 
@@ -87,18 +77,9 @@ reshade::runtime::runtime(api::swapchain *swapchain, api::command_queue *graphic
 	else
 		log::message(log::level::info, "Running on %s.", device_description);
 
-	// Default shortcut PrtScrn
-	_screenshot_key_data[0] = 0x2C;
-
 #if RESHADE_GUI
 	init_gui();
 #endif
-
-	// Ensure config path is absolute, in case an add-on created an effect runtime with a relative path
-	std::error_code ec;
-	resolve_path(_config_path, ec);
-
-	load_config();
 
 	fpng::fpng_init();
 }
@@ -107,10 +88,6 @@ reshade::runtime::~runtime()
 	assert(_worker_threads.empty());
 
 #if RESHADE_GUI
-	// Save configuration before shutting down to ensure the current window state is written to disk
-	save_config();
-	ini_file::flush_cache(_config_path);
-
 	deinit_gui();
 #endif
 }
@@ -257,9 +234,6 @@ bool reshade::runtime::on_init()
 	_last_reload_time = std::chrono::high_resolution_clock::now(); // Intentionally set to current time, so that duration to last reload is valid even when there is no reload on init
 
 	_preset_save_successful = true;
-	_last_screenshot_save_successful = true;
-
-	log::message(log::level::info, "Recreated runtime environment on runtime %p ('%s').", this, _config_path.u8string().c_str());
 
 	return true;
 
@@ -330,12 +304,6 @@ void reshade::runtime::on_reset()
 #if RESHADE_GUI
 	destroy_imgui_resources();
 #endif
-
-#if RESHADE_ADDON
-	invoke_addon_event<addon_event::destroy_effect_runtime>(this);
-#endif
-
-	log::message(log::level::info, "Destroyed runtime environment on runtime %p ('%s').", this, _config_path.u8string().c_str());
 }
 void reshade::runtime::on_present(api::command_queue *present_queue)
 {
@@ -394,9 +362,6 @@ void reshade::runtime::on_present(api::command_queue *present_queue)
 	if (_input != nullptr)
 		input_lock = _input->lock();
 
-	if (_should_save_screenshot)
-		save_screenshot();
-
 	_frame_count++;
 	const auto current_time = std::chrono::high_resolution_clock::now();
 	_last_frame_duration = current_time - _last_present_time; _last_present_time = current_time;
@@ -404,23 +369,7 @@ void reshade::runtime::on_present(api::command_queue *present_queue)
 #if RESHADE_GUI
 	// Draw overlay
 	draw_gui();
-
-	if (_should_save_screenshot && _screenshot_save_gui && (_show_overlay))
-		save_screenshot(" overlay");
 #endif
-
-	// All screenshots were created at this point, so reset request
-	_should_save_screenshot = false;
-
-	// Handle keyboard shortcuts
-	if (!_ignore_shortcuts && _input != nullptr)
-	{
-		if (_input->is_key_pressed(_screenshot_key_data, _force_shortcut_modifiers))
-		{
-			_screenshot_count++;
-			_should_save_screenshot = true; // Remember that we want to save a screenshot next frame
-		}
-	}
 
 	// Stretch main render target back into MSAA back buffer if MSAA is active or copy when format conversion is required
 	if (_back_buffer_resolved != 0)
@@ -478,66 +427,6 @@ void reshade::runtime::on_present(api::command_queue *present_queue)
 	// Update input status
 	if (_input != nullptr)
 		_input->next_frame();
-
-	// Save modified INI files
-	if (!ini_file::flush_cache())
-		_preset_save_successful = false;
-}
-
-void reshade::runtime::load_config()
-{
-	const ini_file &config = ini_file::load_cache(_config_path);
-
-	const auto config_get = [&config](const std::string &section, const std::string &key, auto &values) {
-		if (config.get(section, key, values))
-			return true;
-		// Fall back to global configuration when an entry does not exist in the local configuration
-		return global_config().get(section, key, values);
-	};
-
-	config_get("INPUT", "ForceShortcutModifiers", _force_shortcut_modifiers);
-	config_get("INPUT", "KeyScreenshot", _screenshot_key_data);
-	config_get("SCREENSHOT", "SavePath", _screenshot_path);
-	config_get("SCREENSHOT", "SoundPath", _screenshot_sound_path);
-	config_get("SCREENSHOT", "ClearAlpha", _screenshot_clear_alpha);
-	config_get("SCREENSHOT", "FileFormat", _screenshot_format);
-	config_get("SCREENSHOT", "FileNaming", _screenshot_name);
-	config_get("SCREENSHOT", "JPEGQuality", _screenshot_jpeg_quality);
-#if RESHADE_GUI
-	config_get("SCREENSHOT", "SaveOverlayShot", _screenshot_save_gui);
-#endif
-	config_get("SCREENSHOT", "PostSaveCommand", _screenshot_post_save_command);
-	config_get("SCREENSHOT", "PostSaveCommandArguments", _screenshot_post_save_command_arguments);
-	config_get("SCREENSHOT", "PostSaveCommandWorkingDirectory", _screenshot_post_save_command_working_directory);
-	config_get("SCREENSHOT", "PostSaveCommandHideWindow", _screenshot_post_save_command_hide_window);
-
-#if RESHADE_GUI
-	load_config_gui(config);
-#endif
-}
-void reshade::runtime::save_config() const
-{
-	ini_file &config = ini_file::load_cache(_config_path);
-
-	config.set("INPUT", "ForceShortcutModifiers", _force_shortcut_modifiers);
-	config.set("INPUT", "KeyScreenshot", _screenshot_key_data);
-	config.set("SCREENSHOT", "SavePath", _screenshot_path);
-	config.set("SCREENSHOT", "SoundPath", _screenshot_sound_path);
-	config.set("SCREENSHOT", "ClearAlpha", _screenshot_clear_alpha);
-	config.set("SCREENSHOT", "FileFormat", _screenshot_format);
-	config.set("SCREENSHOT", "FileNaming", _screenshot_name);
-	config.set("SCREENSHOT", "JPEGQuality", _screenshot_jpeg_quality);
-#if RESHADE_GUI
-	config.set("SCREENSHOT", "SaveOverlayShot", _screenshot_save_gui);
-#endif
-	config.set("SCREENSHOT", "PostSaveCommand", _screenshot_post_save_command);
-	config.set("SCREENSHOT", "PostSaveCommandArguments", _screenshot_post_save_command_arguments);
-	config.set("SCREENSHOT", "PostSaveCommandWorkingDirectory", _screenshot_post_save_command_working_directory);
-	config.set("SCREENSHOT", "PostSaveCommandHideWindow", _screenshot_post_save_command_hide_window);
-
-#if RESHADE_GUI
-	save_config_gui(config);
-#endif
 }
 
 static std::string expand_macro_string(const std::string &input, std::vector<std::pair<std::string, std::string>> macros)
@@ -643,133 +532,6 @@ static std::string expand_macro_string(const std::string &input, std::vector<std
 	}
 
 	return result;
-}
-
-void reshade::runtime::save_screenshot(const std::string_view postfix)
-{
-	const unsigned int screenshot_count = _screenshot_count;
-
-	std::string screenshot_name = expand_macro_string(_screenshot_name, {
-		{ "AppName", g_target_executable_path.stem().u8string() },
-	});
-
-	screenshot_name += postfix;
-	screenshot_name += (_screenshot_format == 0 ? ".bmp" : _screenshot_format == 1 ? ".png" : ".jpg");
-
-	const std::filesystem::path screenshot_path = g_reshade_base_path / _screenshot_path / std::filesystem::u8path(screenshot_name);
-
-	log::message(log::level::info, "Saving screenshot to '%s'.", screenshot_path.u8string().c_str());
-
-	_last_screenshot_save_successful = true;
-
-	if (std::vector<uint8_t> pixels(static_cast<size_t>(_width) * static_cast<size_t>(_height) * 4);
-		capture_screenshot(pixels.data()))
-	{
-		const bool include_preset = false;
-		// Play screenshot sound
-		if (!_screenshot_sound_path.empty())
-			utils::play_sound_async(g_reshade_base_path / _screenshot_sound_path);
-
-		_worker_threads.emplace_back([this, screenshot_count, screenshot_path, pixels = std::move(pixels), include_preset]() mutable {
-			// Remove alpha channel
-			int comp = 4;
-			if (_screenshot_clear_alpha)
-			{
-				comp = 3;
-				for (size_t i = 0; i < static_cast<size_t>(_width) * static_cast<size_t>(_height); ++i)
-					*reinterpret_cast<uint32_t *>(pixels.data() + 3 * i) = *reinterpret_cast<const uint32_t *>(pixels.data() + 4 * i);
-			}
-
-			// Create screenshot directory if it does not exist
-			std::error_code ec;
-			_screenshot_directory_creation_successful = true;
-			if (!std::filesystem::exists(screenshot_path.parent_path(), ec))
-				if (!(_screenshot_directory_creation_successful = std::filesystem::create_directories(screenshot_path.parent_path(), ec)))
-					log::message(log::level::error, "Failed to create screenshot directory '%s' with error code %d!", screenshot_path.parent_path().u8string().c_str(), ec.value());
-
-			// Default to a save failure unless it is reported to succeed below
-			bool save_success = false;
-
-			if (FILE *const file = _wfsopen(screenshot_path.c_str(), L"wb", SH_DENYNO))
-			{
-				const auto write_callback = [](void *context, void *data, int size) {
-					fwrite(data, 1, size, static_cast<FILE *>(context));
-				};
-
-				switch (_screenshot_format)
-				{
-				case 0:
-					save_success = stbi_write_bmp_to_func(write_callback, file, _width, _height, comp, pixels.data()) != 0;
-					break;
-				case 1:
-#if 1
-					if (std::vector<uint8_t> encoded_data;
-						fpng::fpng_encode_image_to_memory(pixels.data(), _width, _height, comp, encoded_data))
-						save_success = fwrite(encoded_data.data(), 1, encoded_data.size(), file) == encoded_data.size();
-#else
-					save_success = stbi_write_png_to_func(write_callback, file, _width, _height, comp, pixels.data(), 0) != 0;
-#endif
-					break;
-				case 2:
-					save_success = stbi_write_jpg_to_func(write_callback, file, _width, _height, comp, pixels.data(), _screenshot_jpeg_quality) != 0;
-					break;
-				}
-
-				if (ferror(file))
-					save_success = false;
-
-				fclose(file);
-			}
-
-			if (save_success)
-			{
-				execute_screenshot_post_save_command(screenshot_path, screenshot_count);
-			}
-			else
-			{
-				log::message(log::level::error, "Failed to write screenshot to '%s'!", screenshot_path.u8string().c_str());
-			}
-
-			if (_last_screenshot_save_successful)
-			{
-				_last_screenshot_time = std::chrono::high_resolution_clock::now();
-				_last_screenshot_file = screenshot_path;
-				_last_screenshot_save_successful = save_success;
-			}
-		});
-	}
-}
-bool reshade::runtime::execute_screenshot_post_save_command(const std::filesystem::path &screenshot_path, unsigned int screenshot_count)
-{
-	if (_screenshot_post_save_command.empty() || _screenshot_post_save_command.extension() != L".exe")
-		return false;
-
-	std::string command_line;
-	command_line += '\"';
-	command_line += _screenshot_post_save_command.u8string();
-	command_line += '\"';
-
-	if (!_screenshot_post_save_command_arguments.empty())
-	{
-		command_line += ' ';
-		command_line += expand_macro_string(_screenshot_post_save_command_arguments, {
-			{ "AppName", g_target_executable_path.stem().u8string() },
-			{ "TargetPath", screenshot_path.u8string() },
-			{ "TargetDir", screenshot_path.parent_path().u8string() },
-			{ "TargetFileName", screenshot_path.filename().u8string() },
-			{ "TargetExt", screenshot_path.extension().u8string() },
-			{ "TargetName", screenshot_path.stem().u8string() },
-			{ "Count", std::to_string(screenshot_count) }
-		});
-	}
-
-	if (!utils::execute_command(command_line, g_reshade_base_path / _screenshot_post_save_command_working_directory, _screenshot_post_save_command_hide_window))
-	{
-		log::message(log::level::error, "Failed to execute screenshot post-save command!");
-		return false;
-	}
-
-	return true;
 }
 
 bool reshade::runtime::get_texture_data(api::resource resource, api::resource_usage state, uint8_t *pixels)

@@ -5,7 +5,6 @@
 
 #include "version.h"
 #include "dll_log.hpp"
-#include "ini_file.hpp"
 #include "hook_manager.hpp"
 #include <Windows.h>
 #include <Psapi.h>
@@ -75,15 +74,6 @@ static bool resolve_env_path(std::filesystem::path &path, const std::filesystem:
 /// </summary>
 std::filesystem::path get_base_path(bool default_to_target_executable_path = false)
 {
-	std::filesystem::path result;
-
-	if (reshade::global_config().get("INSTALL", "BasePath", result) && resolve_env_path(result))
-		return result;
-
-	WCHAR buf[4096];
-	if (GetEnvironmentVariableW(L"RESHADE_BASE_PATH_OVERRIDE", buf, ARRAYSIZE(buf)) && resolve_env_path(result = buf))
-		return result;
-
 	return default_to_target_executable_path ? g_target_executable_path.parent_path() : g_reshade_dll_path.parent_path();
 }
 
@@ -96,12 +86,7 @@ std::filesystem::path get_system_path()
 	if (!result.empty())
 		return result; // Return the cached path if it exists
 
-	if (reshade::global_config().get("INSTALL", "ModulePath", result) && resolve_env_path(result))
-		return result;
-
 	WCHAR buf[4096];
-	if (GetEnvironmentVariableW(L"RESHADE_MODULE_PATH_OVERRIDE", buf, ARRAYSIZE(buf)) && resolve_env_path(result = buf))
-		return result;
 
 	// First try environment variable, use system directory if it does not exist or is empty
 	GetSystemDirectoryW(buf, ARRAYSIZE(buf));
@@ -143,26 +128,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
 			g_reshade_base_path = get_base_path(default_base_to_target_executable_path);
 
-			const ini_file &config = reshade::global_config();
-
 			// When ReShade is not loaded by proxy, only actually load when a configuration file exists for the target executable
 			// This e.g. prevents loading the implicit Vulkan layer when not explicitly enabled for an application
 			if (default_base_to_target_executable_path && !GetEnvironmentVariableW(L"RESHADE_DISABLE_LOADING_CHECK", nullptr, 0))
 			{
 				std::error_code ec;
-				if (!std::filesystem::exists(config.path(), ec))
-				{
-#ifndef NDEBUG
-					// Log was not yet opened at this point, so this only writes to debug output
-					reshade::log::message(reshade::log::level::warning, "ReShade was not enabled for '%s'! Aborting initialization ...", g_target_executable_path.u8string().c_str());
-#endif
-					return FALSE; // Make the 'LoadLibrary' call that loaded this instance fail
-				}
+				return FALSE; // Make the 'LoadLibrary' call that loaded this instance fail
 			}
 
-			if (config.get("INSTALL", "Logging") || (!config.has("INSTALL", "Logging") && !GetEnvironmentVariableW(L"RESHADE_DISABLE_LOGGING", nullptr, 0)))
+			if (true)
 			{
-				std::filesystem::path log_path = config.path();
+				std::filesystem::path log_path = "./Logging";
 				log_path.replace_extension(L".log");
 
 				std::error_code ec;
@@ -215,7 +191,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 			}
 
 #ifndef NDEBUG
-			if (config.get("INSTALL", "DumpExceptions"))
+			if (true)
 			{
 				CreateThread(nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(&LoadLibraryW), const_cast<LPVOID>(static_cast<LPCVOID>(L"dbghelp.dll")), 0, nullptr);
 
@@ -267,12 +243,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 				});
 			}
 #endif
-
-			if (config.get("INSTALL", "PreventUnloading"))
-			{
-				GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<LPCWSTR>(hModule), &hModule);
-			}
-
 			// Register modules to hook
 			{
 				if (!GetEnvironmentVariableW(L"RESHADE_DISABLE_INPUT_HOOK", nullptr, 0))
@@ -287,20 +257,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 					if (_wcsicmp(module_name.c_str(), L"dinput8") == 0)
 						reshade::hooks::register_module(get_system_path() / L"dinput8.dll");
 				}
-
-#if RESHADE_ADDON == 1
-				if (!GetEnvironmentVariableW(L"RESHADE_DISABLE_NETWORK_HOOK", nullptr, 0))
-				{
-					reshade::hooks::register_module(L"ws2_32.dll");
-				}
-				else
-				{
-					// Disable network hooks when requested through an environment variable and always disable add-ons in that case
-					extern volatile long g_network_traffic;
-					g_network_traffic = std::numeric_limits<long>::max(); // Special value to indicate that add-ons should never be enabled
-					reshade::addon_enabled = false;
-				}
-#endif
 
 				if (!GetEnvironmentVariableW(L"RESHADE_DISABLE_GRAPHICS_HOOK", nullptr, 0))
 				{
@@ -342,11 +298,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		case DLL_PROCESS_DETACH:
 		{
 			reshade::log::message(reshade::log::level::info, "Exiting ...");
-
-#if RESHADE_ADDON
-			if (reshade::has_loaded_addons())
-				reshade::log::message(reshade::log::level::warning, "Add-ons are still loaded! Application may crash on exit.");
-#endif
 
 			reshade::hooks::uninstall();
 
