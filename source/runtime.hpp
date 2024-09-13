@@ -167,8 +167,6 @@ namespace reshade
 		void reload_effect_next_frame(const char *effect_name) final;
 
 	private:
-		static void check_for_update();
-
 		void load_config();
 		void save_config() const;
 
@@ -189,16 +187,8 @@ namespace reshade
 		uint16_t _back_buffer_samples = 1;
 		api::format _back_buffer_format = api::format::unknown;
 		api::color_space _back_buffer_color_space = api::color_space::unknown;
-		bool _is_vr = false;
-
-#if RESHADE_ADDON
-		bool _is_in_api_call = false;
-		bool _is_in_present_call = false;
-#endif
 
 		#pragma region Status
-		static unsigned int s_latest_version[3];
-
 		bool _is_initialized = false;
 		bool _preset_save_successful = true;
 		std::filesystem::path _config_path;
@@ -271,11 +261,7 @@ namespace reshade
 		void save_custom_style() const;
 
 		void draw_gui();
-		void draw_gui_vr();
 
-		void draw_gui_settings();
-		void draw_gui_statistics();
-		void draw_gui_log();
 		void draw_gui_about();
 		bool init_imgui_resources();
 		void render_imgui_draw_data(api::command_list *cmd_list, ImDrawData *draw_data, api::resource_view rtv);

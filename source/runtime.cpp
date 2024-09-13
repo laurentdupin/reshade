@@ -10,7 +10,6 @@
 #include "dll_resources.hpp"
 #include "ini_file.hpp"
 #include "input.hpp"
-#include "input_gamepad.hpp"
 #include "com_ptr.hpp"
 #include "platform_utils.hpp"
 #include "reshade_api_object_impl.hpp"
@@ -49,7 +48,6 @@ reshade::runtime::runtime(api::swapchain *swapchain, api::command_queue *graphic
 	_swapchain(swapchain),
 	_device(swapchain->get_device()),
 	_graphics_queue(graphics_queue),
-	_is_vr(is_vr),
 	_start_time(std::chrono::high_resolution_clock::now()),
 	_last_present_time(_start_time),
 	_last_frame_duration(std::chrono::milliseconds(1)),
@@ -88,8 +86,6 @@ reshade::runtime::runtime(api::swapchain *swapchain, api::command_queue *graphic
 		log::message(log::level::info, "Running on %s Driver %u.%u.", device_description, driver_version / 100, driver_version % 100);
 	else
 		log::message(log::level::info, "Running on %s.", device_description);
-
-	check_for_update();
 
 	// Default shortcut PrtScrn
 	_screenshot_key_data[0] = 0x2C;
@@ -138,7 +134,7 @@ bool reshade::runtime::on_init()
 	// Create resolve texture and copy pipeline (do this before creating effect resources, to ensure correct back buffer format is set up)
 	if (back_buffer_desc.texture.samples > 1
 		// Always use resolve texture in OpenGL to flip vertically and support sRGB + binding effect stencil
-		|| (_device->get_api() == api::device_api::opengl && !_is_vr)
+		|| (_device->get_api() == api::device_api::opengl)
 		)
 	{
 		const bool need_copy_pipeline =
@@ -242,13 +238,10 @@ bool reshade::runtime::on_init()
 #if RESHADE_GUI
 	if (!init_imgui_resources())
 		goto exit_failure;
-
-	if (_is_vr && !init_gui_vr())
-		goto exit_failure;
 #endif
 
 	const input::window_handle window = _swapchain->get_hwnd();
-	if (window != nullptr && !_is_vr)
+	if (window != nullptr)
 		_input = input::register_window(window);
 	else
 		_input.reset();
@@ -265,10 +258,6 @@ bool reshade::runtime::on_init()
 
 	_preset_save_successful = true;
 	_last_screenshot_save_successful = true;
-
-#if RESHADE_ADDON
-	invoke_addon_event<addon_event::init_effect_runtime>(this);
-#endif
 
 	log::message(log::level::info, "Recreated runtime environment on runtime %p ('%s').", this, _config_path.u8string().c_str());
 
@@ -296,9 +285,6 @@ exit_failure:
 	_app_state = {};
 
 #if RESHADE_GUI
-	if (_is_vr)
-		deinit_gui_vr();
-
 	destroy_imgui_resources();
 #endif
 
@@ -342,9 +328,6 @@ void reshade::runtime::on_reset()
 	_width = _height = 0;
 
 #if RESHADE_GUI
-	if (_is_vr)
-		deinit_gui_vr();
-
 	destroy_imgui_resources();
 #endif
 
@@ -420,10 +403,7 @@ void reshade::runtime::on_present(api::command_queue *present_queue)
 
 #if RESHADE_GUI
 	// Draw overlay
-	if (_is_vr)
-		draw_gui_vr();
-	else
-		draw_gui();
+	draw_gui();
 
 	if (_should_save_screenshot && _screenshot_save_gui && (_show_overlay))
 		save_screenshot(" overlay");
@@ -498,8 +478,6 @@ void reshade::runtime::on_present(api::command_queue *present_queue)
 	// Update input status
 	if (_input != nullptr)
 		_input->next_frame();
-	if (_input_gamepad != nullptr)
-		_input_gamepad->next_frame();
 
 	// Save modified INI files
 	if (!ini_file::flush_cache())
@@ -509,11 +487,6 @@ void reshade::runtime::on_present(api::command_queue *present_queue)
 void reshade::runtime::load_config()
 {
 	const ini_file &config = ini_file::load_cache(_config_path);
-
-	if (config.get("INPUT", "GamepadNavigation"))
-		_input_gamepad = input_gamepad::load();
-	else
-		_input_gamepad.reset();
 
 	const auto config_get = [&config](const std::string &section, const std::string &key, auto &values) {
 		if (config.get(section, key, values))

@@ -246,9 +246,6 @@
     <ClCompile Include="source\dll_main.cpp">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="source\dll_main_test_app.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
     <ClCompile Include="source\dll_resources.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -292,9 +289,6 @@
       <Filter>core</Filter>
     </ClCompile>
     <ClCompile Include="source\input.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="source\input_gamepad.cpp">
       <Filter>core\runtime</Filter>
     </ClCompile>
     <ClCompile Include="source\opengl\opengl_hooks.cpp">
@@ -354,13 +348,7 @@
     <ClCompile Include="source\runtime_gui.cpp">
       <Filter>core\runtime</Filter>
     </ClCompile>
-    <ClCompile Include="source\runtime_gui_vr.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
     <ClCompile Include="source\runtime_manager.cpp">
-      <Filter>core\runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="source\runtime_update_check.cpp">
       <Filter>core\runtime</Filter>
     </ClCompile>
     <ClCompile Include="source\state_block.cpp">
@@ -618,9 +606,6 @@
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="source\input.hpp">
-      <Filter>core\runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="source\input_gamepad.hpp">
       <Filter>core\runtime</Filter>
     </ClInclude>
     <ClInclude Include="source\lockfree_linear_map.hpp">
