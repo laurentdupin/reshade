@@ -10,7 +10,6 @@
 #include "vulkan_impl_type_convert.hpp"
 #include "dll_log.hpp"
 #include "hook_manager.hpp"
-#include "addon_manager.hpp"
 #include "runtime_manager.hpp"
 #include "lockfree_linear_map.hpp"
 #include <cstring> // std::strcmp, std::strncmp
