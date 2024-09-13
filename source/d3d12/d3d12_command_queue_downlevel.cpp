@@ -25,9 +25,6 @@ D3D12CommandQueueDownlevel::~D3D12CommandQueueDownlevel()
 	{
 		reshade::reset_effect_runtime(this);
 
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::destroy_swapchain>(this);
-#endif
 	}
 
 	reshade::destroy_effect_runtime(this);
@@ -73,10 +70,6 @@ HRESULT STDMETHODCALLTYPE D3D12CommandQueueDownlevel::Present(ID3D12GraphicsComm
 	{
 		reshade::reset_effect_runtime(this);
 
-#if RESHADE_ADDON
-		if (_back_buffers[0] != nullptr)
-			reshade::invoke_addon_event<reshade::addon_event::destroy_swapchain>(this);
-#endif
 
 		// Reduce number of back buffers if less are used than predicted
 		if (const auto it = std::find(_back_buffers.begin(), _back_buffers.end(), pSourceTex2D); it != _back_buffers.end())
@@ -88,9 +81,6 @@ HRESULT STDMETHODCALLTYPE D3D12CommandQueueDownlevel::Present(ID3D12GraphicsComm
 		// The first to be set is at index 1 due to the addition above, so it is sufficient to check the last to be set, which will be at index 0
 		if (_back_buffers[0] != nullptr)
 		{
-#if RESHADE_ADDON
-			reshade::invoke_addon_event<reshade::addon_event::init_swapchain>(this);
-#endif
 
 			reshade::init_effect_runtime(this);
 		}
@@ -99,9 +89,6 @@ HRESULT STDMETHODCALLTYPE D3D12CommandQueueDownlevel::Present(ID3D12GraphicsComm
 	// Do not call 'present' event before 'init_swapchain' event
 	if (_back_buffers[0] != nullptr)
 	{
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::present>(_parent_queue, this, nullptr, nullptr, 0, nullptr);
-#endif
 
 		reshade::present_effect_runtime(this, _parent_queue);
 

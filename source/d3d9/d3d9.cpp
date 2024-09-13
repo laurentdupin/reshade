@@ -57,103 +57,6 @@ void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, [[maybe_unuse
 	reshade::log::message(reshade::log::level::info, "  | PresentationInterval                    |"                               " %-#39x |", pp.PresentationInterval);
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
 
-#if RESHADE_ADDON
-	reshade::api::swapchain_desc desc = {};
-	desc.back_buffer.type = reshade::api::resource_type::surface;
-	desc.back_buffer.texture.width = pp.BackBufferWidth;
-	desc.back_buffer.texture.height = pp.BackBufferHeight;
-	desc.back_buffer.texture.depth_or_layers = 1;
-	desc.back_buffer.texture.levels = 1;
-	desc.back_buffer.texture.format = reshade::d3d9::convert_format(pp.BackBufferFormat);
-	desc.back_buffer.heap = reshade::api::memory_heap::gpu_only;
-	desc.back_buffer.usage = reshade::api::resource_usage::render_target;
-
-	if (pp.MultiSampleType >= D3DMULTISAMPLE_2_SAMPLES)
-		desc.back_buffer.texture.samples = static_cast<uint16_t>(pp.MultiSampleType);
-	else if (pp.MultiSampleType == D3DMULTISAMPLE_NONMASKABLE)
-		desc.back_buffer.texture.samples = static_cast<uint16_t>(1 << pp.MultiSampleQuality);
-	else
-		desc.back_buffer.texture.samples = 1;
-
-	const HWND window = (pp.hDeviceWindow != nullptr) ? pp.hDeviceWindow : focus_window;
-
-	if (pp.Windowed)
-	{
-		RECT window_rect = {};
-		GetClientRect(window, &window_rect);
-		if (pp.BackBufferWidth == 0)
-			desc.back_buffer.texture.width = window_rect.right;
-		if (pp.BackBufferHeight == 0)
-			desc.back_buffer.texture.height = window_rect.bottom;
-
-		if (D3DDISPLAYMODE current_mode;
-			pp.BackBufferFormat == D3DFMT_UNKNOWN &&
-			SUCCEEDED(d3d->GetAdapterDisplayMode(adapter_index, &current_mode)))
-		{
-			desc.back_buffer.texture.format = reshade::d3d9::convert_format(current_mode.Format);
-		}
-	}
-
-	desc.back_buffer_count = pp.BackBufferCount;
-	desc.present_mode = pp.SwapEffect;
-	desc.present_flags = pp.Flags;
-	desc.fullscreen_state = pp.Windowed == FALSE;
-	desc.fullscreen_refresh_rate = static_cast<float>(pp.FullScreen_RefreshRateInHz);
-
-	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, window))
-	{
-		pp.BackBufferWidth = desc.back_buffer.texture.width;
-		pp.BackBufferHeight = desc.back_buffer.texture.height;
-		pp.BackBufferFormat = reshade::d3d9::convert_format(desc.back_buffer.texture.format);
-		pp.BackBufferCount = desc.back_buffer_count;
-
-		if (desc.back_buffer.texture.samples > 1)
-		{
-			if (pp.MultiSampleType == D3DMULTISAMPLE_NONMASKABLE)
-			{
-				BitScanReverse(&pp.MultiSampleQuality, desc.back_buffer.texture.samples);
-			}
-			else
-			{
-				pp.MultiSampleType = static_cast<D3DMULTISAMPLE_TYPE>(desc.back_buffer.texture.samples);
-				pp.MultiSampleQuality = 0;
-			}
-		}
-		else
-		{
-			pp.MultiSampleType = D3DMULTISAMPLE_NONE;
-			pp.MultiSampleQuality = 0;
-		}
-
-		pp.SwapEffect = static_cast<D3DSWAPEFFECT>(desc.present_mode);
-		pp.Flags = desc.present_flags;
-
-		if (!desc.fullscreen_state)
-		{
-			pp.Windowed = TRUE;
-			pp.FullScreen_RefreshRateInHz = 0;
-		}
-		else
-		{
-			pp.Windowed = FALSE;
-			pp.FullScreen_RefreshRateInHz = static_cast<UINT>(desc.fullscreen_refresh_rate);
-
-			// Use default values when not provided
-			if (D3DDISPLAYMODE current_mode;
-				SUCCEEDED(d3d->GetAdapterDisplayMode(adapter_index, &current_mode)))
-			{
-				if (desc.back_buffer.texture.width == 0)
-					pp.BackBufferWidth = current_mode.Width;
-				if (desc.back_buffer.texture.height == 0)
-					pp.BackBufferHeight = current_mode.Height;
-				if (desc.back_buffer.texture.format == reshade::api::format::unknown)
-					pp.BackBufferFormat = current_mode.Format;
-				if (desc.fullscreen_refresh_rate == 0)
-					pp.FullScreen_RefreshRateInHz = current_mode.RefreshRate;
-			}
-		}
-	}
-#endif
 }
 void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, D3DDISPLAYMODEEX &fullscreen_desc, IDirect3D9 *d3d, UINT adapter_index, [[maybe_unused]] HWND focus_window)
 {
@@ -241,10 +144,6 @@ HRESULT STDMETHODCALLTYPE IDirect3D9_CreateDevice(IDirect3D9 *pD3D, UINT Adapter
 		return D3DERR_NOTAVAILABLE;
 	}
 
-#if RESHADE_ADDON
-	// Load add-ons before 'create_swapchain' event in 'dump_and_modify_present_parameters'
-	reshade::load_addons();
-#endif
 
 	D3DPRESENT_PARAMETERS pp = *pPresentationParameters;
 	dump_and_modify_present_parameters(pp, pD3D, Adapter, hFocusWindow);
@@ -277,10 +176,6 @@ HRESULT STDMETHODCALLTYPE IDirect3D9_CreateDevice(IDirect3D9 *pD3D, UINT Adapter
 		reshade::log::message(reshade::log::level::warning, "IDirect3D9::CreateDevice failed with error code %s.", reshade::log::hr_to_string(hr).c_str());
 	}
 
-#if RESHADE_ADDON
-	// Device proxy was created at this point, which increased the add-on manager reference count, so can release the one from above again
-	reshade::unload_addons();
-#endif
 
 	return hr;
 }
@@ -306,10 +201,6 @@ HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDeviceEx(IDirect3D9Ex *pD3D, UINT A
 		return D3DERR_NOTAVAILABLE;
 	}
 
-#if RESHADE_ADDON
-	// Load add-ons before 'create_swapchain' event in 'dump_and_modify_present_parameters'
-	reshade::load_addons();
-#endif
 
 	D3DDISPLAYMODEEX fullscreen_mode = { sizeof(fullscreen_mode) };
 	if (pFullscreenDisplayMode != nullptr)
@@ -345,10 +236,6 @@ HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDeviceEx(IDirect3D9Ex *pD3D, UINT A
 		reshade::log::message(reshade::log::level::warning, "IDirect3D9Ex::CreateDeviceEx failed with error code %s.", reshade::log::hr_to_string(hr).c_str());
 	}
 
-#if RESHADE_ADDON
-	// Device proxy was created at this point, which increased the add-on manager reference count, so can release the one from above again
-	reshade::unload_addons();
-#endif
 
 	return hr;
 }

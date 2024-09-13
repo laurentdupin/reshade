@@ -59,9 +59,6 @@ bool reshade::openxr::swapchain_impl::on_init()
 	// Created in 'on_vr_submit' below
 	assert(_side_by_side_texture != 0);
 
-#if RESHADE_ADDON
-	invoke_addon_event<addon_event::init_swapchain>(this);
-#endif
 
 	init_effect_runtime(this);
 
@@ -74,9 +71,6 @@ void reshade::openxr::swapchain_impl::on_reset()
 
 	reset_effect_runtime(this);
 
-#if RESHADE_ADDON
-	invoke_addon_event<addon_event::destroy_swapchain>(this);
-#endif
 
 	_device->destroy_resource(_side_by_side_texture);
 	_side_by_side_texture = {};
@@ -143,9 +137,6 @@ void reshade::openxr::swapchain_impl::on_present(uint32_t view_count, const api:
 
 	cmd_list->barrier(_side_by_side_texture, api::resource_usage::copy_dest, api::resource_usage::present);
 
-#if RESHADE_ADDON
-	invoke_addon_event<addon_event::present>(_graphics_queue, this, nullptr, nullptr, 0, nullptr);
-#endif
 
 	present_effect_runtime(this, _graphics_queue);
 

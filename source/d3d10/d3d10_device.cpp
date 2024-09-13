@@ -501,18 +501,6 @@ HRESULT STDMETHODCALLTYPE D3D10Device::CreateDepthStencilView(ID3D10Resource *pR
 	const HRESULT hr = _orig->CreateDepthStencilView(pResource, pDesc, ppDepthStencilView);
 	if (SUCCEEDED(hr))
 	{
-#if RESHADE_ADDON
-		ID3D10DepthStencilView *const resource_view = *ppDepthStencilView;
-
-		reshade::invoke_addon_event<reshade::addon_event::init_resource_view>(this, to_handle(pResource), reshade::api::resource_usage::depth_stencil, desc, to_handle(resource_view));
-
-		if (reshade::has_addon_event<reshade::addon_event::destroy_resource_view>())
-		{
-			register_destruction_callback_d3dx(resource_view, [this, resource_view]() {
-				reshade::invoke_addon_event<reshade::addon_event::destroy_resource_view>(this, to_handle(resource_view));
-			});
-		}
-#endif
 	}
 #if RESHADE_VERBOSE_LOG
 	else
@@ -528,18 +516,6 @@ HRESULT STDMETHODCALLTYPE D3D10Device::CreateInputLayout(const D3D10_INPUT_ELEME
 	const HRESULT hr = _orig->CreateInputLayout(pInputElementDescs, NumElements, pShaderBytecodeWithInputSignature, BytecodeLength, ppInputLayout);
 	if (SUCCEEDED(hr))
 	{
-#if RESHADE_ADDON
-		ID3D10InputLayout *const pipeline = *ppInputLayout;
-
-		reshade::invoke_addon_event<reshade::addon_event::init_pipeline>(this, _global_pipeline_layout, static_cast<uint32_t>(std::size(subobjects)), subobjects, to_handle(pipeline));
-
-		if (reshade::has_addon_event<reshade::addon_event::destroy_pipeline>())
-		{
-			register_destruction_callback_d3dx(pipeline, [this, pipeline]() {
-				reshade::invoke_addon_event<reshade::addon_event::destroy_pipeline>(this, to_handle(pipeline));
-			});
-		}
-#endif
 	}
 #if RESHADE_VERBOSE_LOG
 	else
@@ -587,18 +563,6 @@ HRESULT STDMETHODCALLTYPE D3D10Device::CreateGeometryShaderWithStreamOutput(cons
 	const HRESULT hr = _orig->CreateGeometryShaderWithStreamOutput(pShaderBytecode, BytecodeLength, pSODeclaration, NumEntries, OutputStreamStride, ppGeometryShader);
 	if (SUCCEEDED(hr))
 	{
-#if RESHADE_ADDON
-		ID3D10GeometryShader *const pipeline = *ppGeometryShader;
-
-		reshade::invoke_addon_event<reshade::addon_event::init_pipeline>(this, _global_pipeline_layout, static_cast<uint32_t>(std::size(subobjects)), subobjects, to_handle(pipeline));
-
-		if (reshade::has_addon_event<reshade::addon_event::destroy_pipeline>())
-		{
-			register_destruction_callback_d3dx(pipeline, [this, pipeline]() {
-				reshade::invoke_addon_event<reshade::addon_event::destroy_pipeline>(this, to_handle(pipeline));
-			});
-		}
-#endif
 	}
 #if RESHADE_VERBOSE_LOG
 	else
@@ -614,18 +578,6 @@ HRESULT STDMETHODCALLTYPE D3D10Device::CreatePixelShader(const void *pShaderByte
 	const HRESULT hr = _orig->CreatePixelShader(pShaderBytecode, BytecodeLength, ppPixelShader);
 	if (SUCCEEDED(hr))
 	{
-#if RESHADE_ADDON
-		ID3D10PixelShader *const pipeline = *ppPixelShader;
-
-		reshade::invoke_addon_event<reshade::addon_event::init_pipeline>(this, _global_pipeline_layout, static_cast<uint32_t>(std::size(subobjects)), subobjects, to_handle(pipeline));
-
-		if (reshade::has_addon_event<reshade::addon_event::destroy_pipeline>())
-		{
-			register_destruction_callback_d3dx(pipeline, [this, pipeline]() {
-				reshade::invoke_addon_event<reshade::addon_event::destroy_pipeline>(this, to_handle(pipeline));
-			});
-		}
-#endif
 	}
 #if RESHADE_VERBOSE_LOG
 	else

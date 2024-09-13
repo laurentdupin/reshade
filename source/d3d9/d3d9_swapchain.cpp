@@ -186,13 +186,6 @@ void Direct3DSwapChain9::on_init()
 {
 	assert(!_is_initialized);
 
-#if RESHADE_ADDON
-	reshade::invoke_addon_event<reshade::addon_event::init_swapchain>(this);
-
-	D3DPRESENT_PARAMETERS pp = {};
-	_orig->GetPresentParameters(&pp);
-	reshade::invoke_addon_event<reshade::addon_event::set_fullscreen_state>(this, pp.Windowed == FALSE, nullptr);
-#endif
 
 	reshade::init_effect_runtime(this);
 
@@ -206,9 +199,6 @@ void Direct3DSwapChain9::on_reset()
 
 	reshade::reset_effect_runtime(this);
 
-#if RESHADE_ADDON
-	reshade::invoke_addon_event<reshade::addon_event::destroy_swapchain>(this);
-#endif
 
 	_back_buffer.reset();
 
@@ -223,15 +213,6 @@ void Direct3DSwapChain9::on_present(const RECT *source_rect, [[maybe_unused]] co
 	{
 		_hwnd = window_override;
 
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::present>(
-			_device,
-			this,
-			reinterpret_cast<const reshade::api::rect *>(source_rect),
-			reinterpret_cast<const reshade::api::rect *>(dest_rect),
-			dirty_region != nullptr ? dirty_region->rdh.nCount : 0,
-			dirty_region != nullptr ? reinterpret_cast<const reshade::api::rect *>(dirty_region->Buffer) : nullptr);
-#endif
 
 		// Only call into the effect runtime if the entire surface is presented, to avoid partial updates messing up effects and the GUI
 		if (is_presenting_entire_surface(source_rect, window_override))

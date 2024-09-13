@@ -42,12 +42,6 @@ extern "C" void APIENTRY glBegin(GLenum mode)
 
 		assert(g_opengl_context->_current_vertex_count == 0);
 
-#if RESHADE_ADDON >= 2
-		const reshade::api::dynamic_state state = reshade::api::dynamic_state::primitive_topology;
-		uint32_t value = static_cast<uint32_t>(reshade::opengl::convert_primitive_topology(mode));
-
-		reshade::invoke_addon_event<reshade::addon_event::bind_pipeline_states>(g_opengl_context, 1, &state, &value);
-#endif
 	}
 }
 
@@ -326,9 +320,6 @@ extern "C" void APIENTRY glEnd()
 
 	if (g_opengl_context)
 	{
-#if RESHADE_ADDON
-		reshade::invoke_addon_event<reshade::addon_event::draw>(g_opengl_context, g_opengl_context->_current_vertex_count, 1, 0, 0); // Cannot be skipped
-#endif
 		g_opengl_context->_current_vertex_count = 0;
 	}
 }
@@ -415,10 +406,6 @@ extern "C" void APIENTRY glFinish()
 }
 extern "C" void APIENTRY glFlush()
 {
-#if RESHADE_ADDON
-	if (g_opengl_context)
-		reshade::invoke_addon_event<reshade::addon_event::execute_command_list>(g_opengl_context, g_opengl_context);
-#endif
 
 	static const auto trampoline = reshade::hooks::call(glFlush);
 	trampoline();
