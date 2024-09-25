@@ -23,6 +23,9 @@ std::filesystem::path g_reshade_dll_path;
 std::filesystem::path g_reshade_base_path;
 std::filesystem::path g_target_executable_path;
 
+HANDLE g_hMapFile;
+PVOID g_pBuf;
+
 /// <summary>
 /// Checks whether the current application is an UWP app.
 /// </summary>
@@ -293,11 +296,49 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 			}
 
 			reshade::log::message(reshade::log::level::info, "Initialized.");
+
+			g_hMapFile = CreateFileMapping(
+						  INVALID_HANDLE_VALUE,    // use paging file
+						  NULL,                    // default security
+						  PAGE_READWRITE,          // read/write access
+						  0,                       // maximum object size (high-order DWORD)
+						  128,                // maximum object size (low-order DWORD)
+						  L"ExtractAndTranslatePID");                 // name of mapping object
+
+			if (g_hMapFile != NULL)
+			{
+				g_pBuf = (LPTSTR)MapViewOfFile(g_hMapFile,   // handle to map object
+								 FILE_MAP_ALL_ACCESS, // read/write permission
+								 0,
+								 0,
+								 128);
+
+				if (g_pBuf != NULL)
+				{
+					DWORD pid = GetCurrentProcessId();
+					CopyMemory(g_pBuf, (PVOID)&pid, sizeof(pid));
+				}
+				else
+				{
+					CloseHandle(g_hMapFile);
+				}
+			}
+
 			break;
 		}
 		case DLL_PROCESS_DETACH:
 		{
 			reshade::log::message(reshade::log::level::info, "Exiting ...");
+
+			if (g_pBuf)
+			{
+				UnmapViewOfFile(g_pBuf);
+			}
+
+			if (g_hMapFile)
+			{
+				CloseHandle(g_hMapFile);
+			}
 
 			reshade::hooks::uninstall();
 
