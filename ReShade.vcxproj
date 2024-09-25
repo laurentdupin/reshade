@@ -145,7 +145,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade32.dll $(SolutionDir)..\Assets\Dlls\ReShade32.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade32.dll $(SolutionDir)..\Assets\Files\ReShade32.dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -180,7 +180,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade64.dll $(SolutionDir)..\Assets\Dlls\ReShade64.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade64.dll $(SolutionDir)..\Assets\Files\ReShade64.dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug App|Win32'">
@@ -287,7 +287,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade32.dll $(SolutionDir)..\Assets\Dlls\ReShade32.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade32.dll $(SolutionDir)..\Assets\Files\ReShade32.dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -330,7 +330,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade64.dll $(SolutionDir)..\Assets\Dlls\ReShade64.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade64.dll $(SolutionDir)..\Assets\Files\ReShade64.dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release App|Win32'">
