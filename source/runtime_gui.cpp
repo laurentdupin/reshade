@@ -21,6 +21,13 @@
 #include <cstring> // std::memcmp, std::memcpy
 #include <algorithm> // std::any_of, std::count_if, std::find, std::find_if, std::max, std::min, std::replace, std::rotate, std::search, std::swap, std::transform
 
+#include <nlohmann/json.hpp>
+#include <locale>
+#include <codecvt>
+#include <sstream>
+
+using json = nlohmann::json;
+
 static bool filter_text(const std::string_view text, const std::string_view filter)
 {
 	return filter.empty() ||
@@ -97,6 +104,10 @@ void reshade::runtime::init_gui()
 void reshade::runtime::deinit_gui()
 {
 	ImGui::DestroyContext(_imgui_context);
+	CloseTranslationDataBuffers();
+
+	ExtractedTexts.clear();
+	TranslatedTexts.clear();
 }
 
 void reshade::runtime::build_font_atlas()
@@ -112,14 +123,25 @@ void reshade::runtime::build_font_atlas()
 	// Remove any existing fonts from atlas first
 	atlas->Clear();
 
+	atlas->TexDesiredWidth = 8192;
+
 	std::error_code ec;
 	const ImWchar *glyph_ranges = nullptr;
 	std::filesystem::path resolved_font_path;
 
-	{
-		glyph_ranges = atlas->GetGlyphRangesDefault();
+	static ImFontGlyphRangesBuilder range;
+	range.Clear();
+	static ImVector<ImWchar> gr;
+	gr.clear();
 
-		_default_font_path.clear();
+	range.AddRanges(ImGui::GetIO().Fonts->GetGlyphRangesDefault());
+	range.AddRanges(ImGui::GetIO().Fonts->GetGlyphRangesChineseFull());
+	range.AddRanges(ImGui::GetIO().Fonts->GetGlyphRangesJapanese());
+
+	range.BuildRanges(&gr);
+
+	{
+		glyph_ranges = gr.Data;
 	}
 
 	const auto add_font_from_file = [atlas](std::filesystem::path &font_path, ImFontConfig cfg, const ImWchar *glyph_ranges, std::error_code &ec) -> bool {
@@ -158,7 +180,8 @@ void reshade::runtime::build_font_atlas()
 	cfg.SizePixels = static_cast<float>(_font_size);
 
 	// Add main font
-	resolved_font_path = _font_path.empty() ? _default_font_path : _font_path;
+	resolved_font_path = "C:\\Users\\Frere\\AppData\\Local\\Microsoft\\Windows\\Fonts\\NotoSansCJKsc-Medium.ttf";
+
 	{
 		if (!add_font_from_file(resolved_font_path, cfg, glyph_ranges, ec))
 		{
@@ -180,23 +203,6 @@ void reshade::runtime::build_font_atlas()
 		atlas->AddFontFromMemoryCompressedBase85TTF(FONT_ICON_BUFFER_NAME_FK, cfg.SizePixels, &cfg, icon_ranges);
 	}
 
-	// Add editor font
-	resolved_font_path = _editor_font_path.empty() ? _default_editor_font_path : _editor_font_path;
-	if (resolved_font_path != _font_path || _editor_font_size != _font_size)
-	{
-		cfg = ImFontConfig();
-		cfg.SizePixels = static_cast<float>(_editor_font_size);
-
-		if (!add_font_from_file(resolved_font_path, cfg, glyph_ranges, ec))
-		{
-			log::message(log::level::error, "Failed to load editor font from '%s' with error code %d!", resolved_font_path.u8string().c_str(), ec.value());
-			resolved_font_path.clear();
-		}
-
-		if (resolved_font_path.empty())
-			atlas->AddFontDefault(&cfg);
-	}
-
 	if (atlas->Build())
 	{
 #if RESHADE_VERBOSE_LOG
@@ -206,10 +212,6 @@ void reshade::runtime::build_font_atlas()
 	else
 	{
 		log::message(log::level::error, "Failed to build font atlas!");
-
-		_font_path.clear();
-		_latin_font_path.clear();
-		_editor_font_path.clear();
 
 		atlas->Clear();
 
@@ -263,9 +265,201 @@ void reshade::runtime::build_font_atlas()
 	_device->set_resource_name(_font_atlas_tex, "ImGui font atlas");
 }
 
+#define TRANSLATION_AND_EXTRACTION_BUFFER_SIZE 1000000
+
+void reshade::runtime::CheckAndOpenTranslationDataBuffers()
+{
+	if (_hMapFileExtraction == NULL)
+	{
+		_hMapFileExtraction = OpenFileMapping(PAGE_READWRITE, FALSE, L"TextExtractionOutputDataMemory");
+
+		if (_hMapFileExtraction != NULL)
+		{
+			_pBufExtraction = (LPTSTR)MapViewOfFile(_hMapFileExtraction, FILE_MAP_READ, 0, 0, 0);
+
+			if (_pBufExtraction == NULL)
+			{
+				CloseHandle(_hMapFileExtraction);
+				_hMapFileExtraction = NULL;
+			}
+		}
+	}
+
+	if (_MutexExtraction == NULL)
+	{
+		_MutexExtraction = CreateMutex(NULL, FALSE, L"TextExtractionOutputMutex");
+	}
+
+	if (_hMapFileTranslation == NULL)
+	{
+		_hMapFileTranslation = OpenFileMapping(PAGE_READWRITE, FALSE, L"TranslationOutputDataMemory");
+
+		if (_hMapFileTranslation != NULL)
+		{
+			_pBufTranslation = (LPTSTR)MapViewOfFile(_hMapFileTranslation, FILE_MAP_READ, 0, 0, 0);
+
+			if (_pBufTranslation == NULL)
+			{
+				CloseHandle(_hMapFileTranslation);
+				_hMapFileTranslation = NULL;
+			}
+		}
+	}
+
+	if (_MutexTranslation == NULL)
+	{
+		_MutexTranslation = CreateMutex(NULL, FALSE, L"TranslationOutputMutex");
+	}
+}
+
+static std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> UTF8Converter;
+
+std::string ToUTF8(uint32_t cp)
+{
+	return UTF8Converter.to_bytes( (char32_t)cp );
+}
+
+void ConvertUnicodeEscapedToUtf8(std::string &str)
+{
+	std::string::size_type startIdx = 0;
+	do
+	{
+		startIdx = str.find("\\u", startIdx);
+		if (startIdx == std::string::npos) break;
+
+		std::string::size_type endIdx = str.find_first_not_of("0123456789abcdefABCDEF", startIdx + 2);
+		if (endIdx == std::string::npos) break;
+
+		if (endIdx > startIdx + 6)
+		{
+			endIdx = startIdx + 6;
+		}
+
+		std::string tmpStr = str.substr(startIdx + 2, endIdx - (startIdx + 2));
+		std::istringstream iss(tmpStr);
+
+		uint32_t cp;
+		if (iss >> std::hex >> cp)
+		{
+			std::string utf8 = ToUTF8(cp);
+			str.replace(startIdx, 2 + tmpStr.length(), utf8);
+			startIdx += utf8.length();
+		}
+		else
+			startIdx += 2;
+	} while (true);
+}
+
+void reshade::runtime::UpdateTranslationData()
+{
+	char ReceivingBuffer[TRANSLATION_AND_EXTRACTION_BUFFER_SIZE];
+
+	if (_pBufExtraction != NULL && _MutexExtraction != NULL)
+	{
+		WaitForSingleObject(_MutexExtraction, INFINITE);
+		strcpy_s(ReceivingBuffer, (char *)_pBufExtraction);
+		ReleaseMutex(_MutexExtraction);
+
+		auto BufferedString = std::string(ReceivingBuffer);
+		ConvertUnicodeEscapedToUtf8(BufferedString);
+
+		if (strlen(ReceivingBuffer) > 0)
+		{
+			try
+			{
+				auto extraction = json::parse(BufferedString);
+
+				ExtractedTexts.clear();
+
+				for (auto &extract : extraction)
+				{
+					auto &back = ExtractedTexts.emplace_back();
+					back.TopLeftCornerX = extract["TopLeftCornerX"];
+					back.TopLeftCornerY = extract["TopLeftCornerY"];
+					back.BottomRightCornerX = extract["BottomRightCornerX"];
+					back.BottomRightCornerY = extract["BottomRightCornerY"];
+					back.Text = extract["Text"];
+				}
+			}
+			catch (const std::exception &)
+			{
+				
+			}
+		}
+	}
+
+	if (_pBufTranslation != NULL && _MutexTranslation != NULL)
+	{
+		WaitForSingleObject(_MutexTranslation, INFINITE);
+		strcpy_s(ReceivingBuffer, (char *)_pBufTranslation);
+		ReleaseMutex(_MutexTranslation);
+
+		if (strlen(ReceivingBuffer) > 0)
+		{
+			try
+			{
+				auto translation = json::parse(ReceivingBuffer);
+
+				TranslatedTexts.clear();
+
+				for (auto &translate : translation.items())
+				{
+					TranslatedTexts.try_emplace(translate.key(), translate.value());
+				}
+			}
+			catch (const std::exception &)
+			{
+
+			}
+		}
+	}
+}
+
+void reshade::runtime::CloseTranslationDataBuffers()
+{
+	if (_pBufExtraction != NULL)
+	{
+		UnmapViewOfFile(_pBufExtraction);
+		_pBufExtraction = NULL;
+	}
+
+	if (_hMapFileExtraction != NULL)
+	{
+		CloseHandle(_hMapFileExtraction);
+		_hMapFileExtraction = NULL;
+	}
+
+	if (_MutexExtraction != NULL)
+	{
+		CloseHandle(_MutexExtraction);
+		_MutexExtraction = NULL;
+	}
+
+	if (_pBufTranslation != NULL)
+	{
+		UnmapViewOfFile(_pBufTranslation);
+		_pBufTranslation = NULL;
+	}
+
+	if (_hMapFileTranslation != NULL)
+	{
+		CloseHandle(_hMapFileTranslation);
+		_hMapFileTranslation = NULL;
+	}
+
+	if (_MutexTranslation != NULL)
+	{
+		CloseHandle(_MutexTranslation);
+		_MutexTranslation = NULL;
+	}
+}
+
 void reshade::runtime::draw_gui()
 {
 	assert(_is_initialized);
+
+	CheckAndOpenTranslationDataBuffers();
+	UpdateTranslationData();
 
 	bool show_overlay = _show_overlay;
 	api::input_source show_overlay_source = api::input_source::keyboard;
@@ -289,22 +483,10 @@ void reshade::runtime::draw_gui()
 	if (show_overlay != _show_overlay)
 		open_overlay(show_overlay, show_overlay_source);
 
-	const bool show_splash_window = _show_splash && (_last_present_time - _last_reload_time) < std::chrono::seconds(5);
-
-	// Do not show this message in the same frame the screenshot is taken (so that it won't show up on the GUI screenshot)
-	const bool show_preset_transition_message = false;
-	const bool show_message_window = show_preset_transition_message || !_preset_save_successful;
-
-	const bool show_clock = _show_clock == 1 || (_show_overlay && _show_clock > 1);
-	const bool show_fps = _show_fps == 1 || (_show_overlay && _show_fps > 1);
-	const bool show_frametime = _show_frametime == 1 || (_show_overlay && _show_frametime > 1);
-	const bool show_preset_name = _show_preset_name == 1 || (_show_overlay && _show_preset_name > 1);
-	bool show_statistics_window = show_clock || show_fps || show_frametime || show_preset_name;
-
 	_ignore_shortcuts = false;
 	_block_input_next_frame = false;
 
-	if (!show_splash_window && !show_message_window && !show_statistics_window && !_show_overlay)
+	if (!_show_overlay)
 	{
 		if (_input != nullptr)
 		{
@@ -465,8 +647,10 @@ void reshade::runtime::draw_gui()
 	ImVec2 viewport_offset = ImVec2(0, 0);
 	const bool show_spinner = false;
 
+	ImGui::ShowMetricsWindow();
+
 	// Create ImGui widgets and windows
-	if (show_splash_window && !(show_spinner && show_overlay))
+	if (true)
 	{
 		ImGui::SetNextWindowPos(_imgui_context->Style.WindowPadding);
 		ImGui::SetNextWindowSize(ImVec2(imgui_io.DisplaySize.x - 20.0f, 0.0f));
@@ -482,7 +666,18 @@ void reshade::runtime::draw_gui()
 			ImGuiWindowFlags_NoDocking |
 			ImGuiWindowFlags_NoFocusOnAppearing);
 		{
-			ImGui::TextUnformatted("ReShade " VERSION_STRING_PRODUCT);
+			for (auto &text : ExtractedTexts)
+			{
+				ImGui::Text(text.Text.c_str());
+
+				if (TranslatedTexts.find(text.Text) != TranslatedTexts.end())
+				{
+					ImGui::SameLine();
+					ImGui::Text(" => ");
+					ImGui::SameLine();
+					ImGui::Text(TranslatedTexts.at(text.Text).c_str());
+				}
+			}
 
 			ImGui::Spacing();
 
@@ -529,104 +724,6 @@ void reshade::runtime::draw_gui()
 		ImGui::End();
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar();
-	}
-
-	if (show_message_window)
-	{
-		ImGui::SetNextWindowPos(_imgui_context->Style.WindowPadding + viewport_offset);
-		ImGui::SetNextWindowSize(ImVec2(imgui_io.DisplaySize.x - 20.0f, 0.0f));
-		ImGui::Begin("Message Window", nullptr,
-			ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_NoNav |
-			ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoInputs |
-			ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_NoDocking |
-			ImGuiWindowFlags_NoFocusOnAppearing);
-
-		viewport_offset.y += ImGui::GetWindowHeight() + _imgui_context->Style.WindowPadding.x; // Add small space between windows
-
-		ImGui::End();
-	}
-
-	if (show_statistics_window && !show_splash_window && !show_message_window)
-	{
-		ImVec2 fps_window_pos(5, 5);
-		ImVec2 fps_window_size(200, 0);
-
-		// Get last calculated window size (because of 'ImGuiWindowFlags_AlwaysAutoResize')
-		if (ImGuiWindow *const fps_window = ImGui::FindWindowByName("OSD"))
-		{
-			fps_window_size  = fps_window->Size;
-			fps_window_size.y = std::max(fps_window_size.y, _imgui_context->Style.FramePadding.y * 4.0f + _imgui_context->Style.ItemSpacing.y +
-				(_imgui_context->Style.ItemSpacing.y + _imgui_context->FontBaseSize * _fps_scale) * ((show_clock ? 1 : 0) + (show_fps ? 1 : 0) + (show_frametime ? 1 : 0) + (show_preset_name ? 1 : 0)));
-		}
-
-		if (_fps_pos % 2)
-			fps_window_pos.x = imgui_io.DisplaySize.x - fps_window_size.x - 5;
-		if (_fps_pos > 1)
-			fps_window_pos.y = imgui_io.DisplaySize.y - fps_window_size.y - 5;
-
-		ImGui::SetNextWindowPos(fps_window_pos);
-		ImGui::PushStyleColor(ImGuiCol_Text, (const ImVec4 &)_fps_col);
-		ImGui::Begin("OSD", nullptr,
-			ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_NoNav |
-			ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoInputs |
-			ImGuiWindowFlags_NoSavedSettings |
-			ImGuiWindowFlags_NoDocking |
-			ImGuiWindowFlags_NoFocusOnAppearing |
-			ImGuiWindowFlags_NoBackground |
-			ImGuiWindowFlags_AlwaysAutoResize);
-
-		ImGui::SetWindowFontScale(_fps_scale);
-
-		const float content_width = ImGui::GetContentRegionAvail().x;
-		char temp[512];
-
-		if (show_clock)
-		{
-			const std::time_t t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-			struct tm tm; localtime_s(&tm, &t);
-
-			int temp_size;
-			switch (_clock_format)
-			{
-			default:
-			case 0:
-				temp_size = ImFormatString(temp, sizeof(temp), "%02d:%02d", tm.tm_hour, tm.tm_min);
-				break;
-			case 1:
-				temp_size = ImFormatString(temp, sizeof(temp), "%02d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
-				break;
-			case 2:
-				temp_size = ImFormatString(temp, sizeof(temp), "%.4d-%.2d-%.2d %02d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-				break;
-			}
-			if (_fps_pos % 2) // Align text to the right of the window
-				ImGui::SetCursorPosX(content_width - ImGui::CalcTextSize(temp, temp + temp_size).x + _imgui_context->Style.ItemSpacing.x);
-			ImGui::TextUnformatted(temp, temp + temp_size);
-		}
-		if (show_fps)
-		{
-			const int temp_size = ImFormatString(temp, sizeof(temp), "%.0f fps", imgui_io.Framerate);
-			if (_fps_pos % 2)
-				ImGui::SetCursorPosX(content_width - ImGui::CalcTextSize(temp, temp + temp_size).x + _imgui_context->Style.ItemSpacing.x);
-			ImGui::TextUnformatted(temp, temp + temp_size);
-		}
-		if (show_frametime)
-		{
-			const int temp_size = ImFormatString(temp, sizeof(temp), "%5.2f ms", 1000.0f / imgui_io.Framerate);
-			if (_fps_pos % 2)
-				ImGui::SetCursorPosX(content_width - ImGui::CalcTextSize(temp, temp + temp_size).x + _imgui_context->Style.ItemSpacing.x);
-			ImGui::TextUnformatted(temp, temp + temp_size);
-		}
-
-		ImGui::Dummy(ImVec2(200, 0)); // Force a minimum window width
-
-		ImGui::End();
-		ImGui::PopStyleColor();
 	}
 
 	if (_show_overlay)

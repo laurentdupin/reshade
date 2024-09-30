@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <atomic>
 #include <shared_mutex>
+#include <unordered_map>
+#include <Windows.h>
 
 struct ImFont;
 struct ImDrawData;
@@ -19,6 +21,15 @@ struct ImGuiContext;
 
 class ini_file;
 namespace reshadefx { struct sampler_desc; }
+
+struct ExtractedText
+{
+	float TopLeftCornerX = 0.0f;
+	float TopLeftCornerY = 0.0f;
+	float BottomRightCornerX = 0.0f;
+	float BottomRightCornerY = 0.0f;
+	std::string Text = "";
+};
 
 namespace reshade
 {
@@ -225,6 +236,10 @@ namespace reshade
 		void load_custom_style();
 		void save_custom_style() const;
 
+		void CheckAndOpenTranslationDataBuffers();
+		void UpdateTranslationData();
+		void CloseTranslationDataBuffers();
+
 		void draw_gui();
 
 		void draw_gui_about();
@@ -282,9 +297,6 @@ namespace reshade
 		int _editor_font_size = 0;
 		int _style_index = 2;
 		int _editor_style_index = 0;
-		std::filesystem::path _font_path, _default_font_path;
-		std::filesystem::path _latin_font_path;
-		std::filesystem::path _editor_font_path, _default_editor_font_path;
 		std::filesystem::path _file_selection_path;
 		float _fps_col[4] = { 1.0f, 1.0f, 0.784314f, 1.0f };
 		float _fps_scale = 1.0f;
@@ -301,6 +313,17 @@ namespace reshade
 		uintmax_t _last_log_size;
 		std::vector<std::string> _log_lines;
 		#pragma endregion
+
+		HANDLE _hMapFileExtraction = NULL;
+		PVOID _pBufExtraction = NULL;
+		HANDLE _MutexExtraction = NULL;
+
+		HANDLE _hMapFileTranslation = NULL;
+		PVOID _pBufTranslation = NULL;
+		HANDLE _MutexTranslation = NULL;
+
+		std::vector<ExtractedText> ExtractedTexts;
+		std::unordered_map<std::string, std::string> TranslatedTexts;
 #endif
 	};
 }

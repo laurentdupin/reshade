@@ -23,8 +23,8 @@ std::filesystem::path g_reshade_dll_path;
 std::filesystem::path g_reshade_base_path;
 std::filesystem::path g_target_executable_path;
 
-HANDLE g_hMapFile;
-PVOID g_pBuf;
+HANDLE g_hMapFile = NULL;
+PVOID g_pBuf = NULL;
 
 /// <summary>
 /// Checks whether the current application is an UWP app.
@@ -321,6 +321,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 				else
 				{
 					CloseHandle(g_hMapFile);
+					g_hMapFile = NULL;
 				}
 			}
 
@@ -333,11 +334,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 			if (g_pBuf)
 			{
 				UnmapViewOfFile(g_pBuf);
+				g_pBuf = NULL;
 			}
 
 			if (g_hMapFile)
 			{
 				CloseHandle(g_hMapFile);
+				g_hMapFile = NULL;
 			}
 
 			reshade::hooks::uninstall();
