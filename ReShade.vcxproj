@@ -49,10 +49,10 @@
     <VcpkgEnabled>false</VcpkgEnabled>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Platform)'=='Win32'">
-    <TargetName>ReShade32</TargetName>
+    <TargetName>ExtractAndTranslateViewer32</TargetName>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Platform)'=='x64'">
-    <TargetName>ReShade64</TargetName>
+    <TargetName>ExtractAndTranslateViewer64</TargetName>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)'=='Debug'">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -142,7 +142,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade32.dll $(SolutionDir)..\Assets\Files\ReShade32.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).dll $(SolutionDir)..\Assets\Files\$(TargetName).dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Test|Win32'">
@@ -177,8 +177,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>echo F | xcopy /y "$(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).exe" "$(SolutionDir)..\Assets\Files\$(TargetName).exe.bytes"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -213,7 +212,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade64.dll $(SolutionDir)..\Assets\Files\ReShade64.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).dll $(SolutionDir)..\Assets\Files\$(TargetName).dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Test|x64'">
@@ -248,8 +247,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>echo F | xcopy /y "$(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).exe" "$(SolutionDir)..\Assets\Files\$(TargetName).exe.bytes"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug App|Win32'">
@@ -356,7 +354,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade32.dll $(SolutionDir)..\Assets\Files\ReShade32.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).dll $(SolutionDir)..\Assets\Files\$(TargetName).dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release Test|Win32'">
@@ -399,8 +397,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>echo F | xcopy /y "$(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).exe" "$(SolutionDir)..\Assets\Files\$(TargetName).exe.bytes"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -443,7 +440,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\ReShade64.dll $(SolutionDir)..\Assets\Files\ReShade64.dll.bytes</Command>
+      <Command>echo F | xcopy /y $(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).dll $(SolutionDir)..\Assets\Files\$(TargetName).dll.bytes</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release Test|x64'">
@@ -486,8 +483,7 @@
       <Command>powershell -ExecutionPolicy Bypass -File tools\update_version.ps1 res\version.h -config "$(Configuration)" -platform "$(Platform)"</Command>
     </PreBuildEvent>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>echo F | xcopy /y "$(SolutionDir)bin\$(Platform)\$(Configuration)\$(TargetName).exe" "$(SolutionDir)..\Assets\Files\$(TargetName).exe.bytes"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release App|Win32'">

@@ -242,7 +242,6 @@ namespace reshade
 
 		void draw_gui();
 
-		void draw_gui_about();
 		bool init_imgui_resources();
 		void render_imgui_draw_data(api::command_list *cmd_list, ImDrawData *draw_data, api::resource_view rtv);
 		void destroy_imgui_resources();

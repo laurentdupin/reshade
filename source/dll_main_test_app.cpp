@@ -36,6 +36,13 @@ enum class DEVICE_API
 	OPENGL
 };
 
+enum class TRACKING_TYPE
+{
+	NONE,
+	SCREEN,
+	WINDOW
+};
+
 struct scoped_module_handle
 {
 	scoped_module_handle(LPCWSTR name) : module(LoadLibraryW(name))
@@ -73,8 +80,43 @@ BOOL CALLBACK GetMonitorData(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonit
 	return TRUE;
 }
 
-int WINAPI CreateAndRunWindow()
+int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND trackedwindow)
 {
+	LONG window_w = 1024;
+	LONG window_h = 800;
+
+	const LONG window_x = (GetSystemMetrics(SM_CXSCREEN) - window_w) / 2;
+	const LONG window_y = (GetSystemMetrics(SM_CYSCREEN) - window_h) / 2;
+
+	RECT window_rect = { window_x, window_y, window_x + window_w, window_y + window_h };
+	AdjustWindowRect(&window_rect, window_x > 0 && window_y > 0 ? WS_OVERLAPPEDWINDOW : WS_POPUP, FALSE);
+
+	std::vector<RECT> MonitorRects;
+	EnumDisplayMonitors(NULL, NULL, GetMonitorData, (LPARAM)&MonitorRects);
+
+	if (trackingtype == TRACKING_TYPE::SCREEN)
+	{
+		if (screenid >= 0 && screenid < MonitorRects.size())
+		{
+			window_rect = MonitorRects[screenid];
+		}
+		else
+		{
+			return 1;
+		}
+	}
+	else if (trackingtype == TRACKING_TYPE::WINDOW)
+	{
+		RECT trackedwindowrect;
+		GetWindowRect(trackedwindow, &trackedwindowrect);
+
+		window_rect = trackedwindowrect;
+	}
+	else
+	{
+		return 1;
+	}
+
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 	g_module_handle = hInstance;
 	g_reshade_dll_path = get_module_path(hInstance);
@@ -114,23 +156,10 @@ int WINAPI CreateAndRunWindow()
 
 	RegisterClass(&wc);
 
-	LONG window_w = 1024;
-	LONG window_h =  800;
-
-	const LONG window_x = (GetSystemMetrics(SM_CXSCREEN) - window_w) / 2;
-	const LONG window_y = (GetSystemMetrics(SM_CYSCREEN) - window_h) / 2;
-
-	RECT window_rect = { window_x, window_y, window_x + window_w, window_y + window_h };
-	AdjustWindowRect(&window_rect, window_x > 0 && window_y > 0 ? WS_OVERLAPPEDWINDOW : WS_POPUP, FALSE);
-
-	std::vector<RECT> MonitorRects;
-	EnumDisplayMonitors(NULL, NULL, GetMonitorData, (LPARAM)&MonitorRects);
-	window_rect = MonitorRects[0];
-
 	// Create and show window instance
 	const HWND window_handle = CreateWindow(
 		wc.lpszClassName, L"ExtractAndTranslate", window_x > 0 && window_y > 0 ? WS_OVERLAPPEDWINDOW : WS_POPUP,
-		window_rect.left, window_rect.top, window_rect.right - window_rect.left, window_rect.bottom - window_rect.top, nullptr, nullptr, hInstance, nullptr);
+		window_rect.left, window_rect.top, window_rect.right - window_rect.left, window_rect.bottom - window_rect.top, trackedwindow, nullptr, hInstance, nullptr);
 
 	SetWindowLong(window_handle, GWL_STYLE, 0);
 
@@ -199,8 +228,22 @@ int WINAPI CreateAndRunWindow()
 
 		while (true)
 		{
+			if (trackingtype == TRACKING_TYPE::SCREEN)
+			{
+
+			}
+			else if (trackingtype == TRACKING_TYPE::WINDOW)
+			{
+				RECT trackedwindowrect;
+				GetWindowRect(trackedwindow, &trackedwindowrect);
+				SetWindowPos(window_handle, NULL, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
+			}
+
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) && msg.message != WM_QUIT)
+			{
 				DispatchMessage(&msg);
+			}
+
 			if (msg.message == WM_QUIT)
 				break;
 
@@ -235,9 +278,39 @@ int WINAPI CreateAndRunWindow()
 	return static_cast<int>(msg.wParam);
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-	PSTR lpCmdLine, int nCmdShow)
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nCmdShow)
 {
-	CreateAndRunWindow();
-	return 0;
+	if (__argc != 3)
+	{
+		return 1;
+	}
+
+	auto cmpscreen = strcmp(__argv[1], "SCREEN") == 0;
+	auto cmpwindow = strcmp(__argv[1], "WINDOW") == 0;
+
+	if (!cmpscreen && !cmpwindow)
+	{
+		return 1;
+	}
+
+	TRACKING_TYPE trackingtype = TRACKING_TYPE::NONE;
+	int screenid = 0;
+	HWND trackingwindow = NULL;
+
+	if (cmpscreen)
+	{
+		trackingtype = TRACKING_TYPE::SCREEN;
+		screenid = atoi(__argv[2]);
+	}
+	else if (cmpwindow)
+	{
+		trackingtype = TRACKING_TYPE::WINDOW;
+		trackingwindow = (HWND)atoi(__argv[2]);
+	}
+
+	//TESTING WINDOW
+	//trackingtype = TRACKING_TYPE::WINDOW;
+	//trackingwindow = (HWND)1448712;
+
+	return CreateAndRunWindow(trackingtype, screenid, trackingwindow);
 }

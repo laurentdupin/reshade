@@ -352,12 +352,12 @@ void ConvertUnicodeEscapedToUtf8(std::string &str)
 
 void reshade::runtime::UpdateTranslationData()
 {
-	char ReceivingBuffer[TRANSLATION_AND_EXTRACTION_BUFFER_SIZE];
+	char *ReceivingBuffer = new char[TRANSLATION_AND_EXTRACTION_BUFFER_SIZE];
 
 	if (_pBufExtraction != NULL && _MutexExtraction != NULL)
 	{
 		WaitForSingleObject(_MutexExtraction, INFINITE);
-		strcpy_s(ReceivingBuffer, (char *)_pBufExtraction);
+		strcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufExtraction);
 		ReleaseMutex(_MutexExtraction);
 
 		auto BufferedString = std::string(ReceivingBuffer);
@@ -391,7 +391,7 @@ void reshade::runtime::UpdateTranslationData()
 	if (_pBufTranslation != NULL && _MutexTranslation != NULL)
 	{
 		WaitForSingleObject(_MutexTranslation, INFINITE);
-		strcpy_s(ReceivingBuffer, (char *)_pBufTranslation);
+		strcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufTranslation);
 		ReleaseMutex(_MutexTranslation);
 
 		if (strlen(ReceivingBuffer) > 0)
@@ -413,6 +413,8 @@ void reshade::runtime::UpdateTranslationData()
 			}
 		}
 	}
+
+	delete[] ReceivingBuffer;
 }
 
 void reshade::runtime::CloseTranslationDataBuffers()
@@ -714,73 +716,6 @@ void reshade::runtime::draw_gui()
 	{
 		const ImGuiViewport *const viewport = ImGui::GetMainViewport();
 
-		// Change font size if user presses the control key and moves the mouse wheel
-		if (!_no_font_scaling && imgui_io.KeyCtrl && imgui_io.MouseWheel != 0 && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
-		{
-			_font_size = ImClamp(_font_size + static_cast<int>(imgui_io.MouseWheel), 8, 64);
-			_editor_font_size = ImClamp(_editor_font_size + static_cast<int>(imgui_io.MouseWheel), 8, 64);
-			imgui_io.Fonts->TexReady = false;
-			_is_font_scaling = true;
-		}
-
-		if (_is_font_scaling)
-		{
-			if (!imgui_io.KeyCtrl)
-				_is_font_scaling = false;
-
-			ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, _imgui_context->Style.WindowPadding * 2.0f);
-			ImGui::Begin("FontScaling", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings);
-			ImGui::Text(("Scaling font size (%d) with 'Ctrl' + mouse wheel"), _font_size);
-			ImGui::End();
-			ImGui::PopStyleVar();
-		}
-
-		const std::pair<std::string, void(runtime::*)()> overlay_callbacks[] =
-		{
-			{ ("About###about"), &runtime::draw_gui_about }
-		};
-
-		const ImGuiID root_space_id = ImGui::GetID("ViewportDockspace");
-
-		// Set up default dock layout if this was not done yet
-		const bool init_window_layout = !ImGui::DockBuilderGetNode(root_space_id);
-		if (init_window_layout)
-		{
-			// Add the root node
-			ImGui::DockBuilderAddNode(root_space_id, ImGuiDockNodeFlags_DockSpace);
-			ImGui::DockBuilderSetNodeSize(root_space_id, viewport->Size);
-
-			// Split root node into two spaces
-			ImGuiID main_space_id = 0;
-			ImGuiID right_space_id = 0;
-			ImGui::DockBuilderSplitNode(root_space_id, ImGuiDir_Left, 0.35f, &main_space_id, &right_space_id);
-
-			// Attach most windows to the main dock space
-			for (const std::pair<std::string, void(runtime::*)()> &widget : overlay_callbacks)
-				ImGui::DockBuilderDockWindow(widget.first.c_str(), main_space_id);
-
-			// Attach editor window to the remaining dock space
-			ImGui::DockBuilderDockWindow("###editor", right_space_id);
-
-			// Commit the layout
-			ImGui::DockBuilderFinish(root_space_id);
-		}
-
-		ImGui::SetNextWindowPos(viewport->Pos + viewport_offset);
-		ImGui::SetNextWindowSize(viewport->Size - viewport_offset);
-		ImGui::SetNextWindowViewport(viewport->ID);
-		ImGui::Begin("Viewport", nullptr,
-			ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_NoNav |
-			ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoDocking | // This is the background viewport, the docking space is a child of it
-			ImGuiWindowFlags_NoFocusOnAppearing |
-			ImGuiWindowFlags_NoBringToFrontOnFocus |
-			ImGuiWindowFlags_NoBackground);
-		ImGui::DockSpace(root_space_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
-		ImGui::End();
-
 		if (_imgui_context->NavInputSource > ImGuiInputSource_Mouse && _imgui_context->NavWindowingTarget == nullptr)
 		{
 			// Reset input source to mouse when the cursor is moved
@@ -789,13 +724,6 @@ void reshade::runtime::draw_gui()
 			// Ensure there is always a window that has navigation focus when keyboard or gamepad navigation is used (choose the first overlay window created next)
 			else if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow))
 				ImGui::SetNextWindowFocus();
-		}
-
-		for (const std::pair<std::string, void(runtime:: *)()> &widget : overlay_callbacks)
-		{
-			if (ImGui::Begin(widget.first.c_str(), nullptr, ImGuiWindowFlags_NoFocusOnAppearing)) // No focus so that window state is preserved between opening/closing the GUI
-				(this->*widget.second)();
-			ImGui::End();
 		}
 	}
 
@@ -836,119 +764,13 @@ void reshade::runtime::draw_gui()
 	ImGui::SetCurrentContext(backup_context);
 }
 
-void reshade::runtime::draw_gui_about()
-{
-	ImGui::TextUnformatted("ReShade " VERSION_STRING_PRODUCT);
-
-	ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize((" Open website ")).x);
-	if (ImGui::SmallButton((" Open website ")))
-		utils::execute_command("https://reshade.me");
-
-	ImGui::Separator();
-
-	ImGui::PushTextWrapPos();
-
-	ImGui::TextUnformatted(("Developed and maintained by crosire."));
-	ImGui::TextUnformatted(("This project makes use of several open source libraries, licenses of which are listed below:"));
-
-	if (ImGui::CollapsingHeader("ReShade", ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_RESHADE);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("MinHook"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_MINHOOK);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("Dear ImGui"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_IMGUI);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("ImGuiColorTextEdit"))
-	{
-		ImGui::TextUnformatted("Copyright (C) 2017 BalazsJako\
-\
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\
-\
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\
-\
-THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.");
-	}
-	if (ImGui::CollapsingHeader("gl3w"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_GL3W);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("UTF8-CPP"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_UTFCPP);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("stb_image, stb_image_write"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_STB);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("DDS loading from SOIL"))
-	{
-		ImGui::TextUnformatted("Jonathan \"lonesock\" Dummer");
-	}
-	if (ImGui::CollapsingHeader("fpng"))
-	{
-		ImGui::TextUnformatted("Public Domain (https://github.com/richgel999/fpng)");
-	}
-	if (ImGui::CollapsingHeader("SPIR-V"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_SPIRV);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("Vulkan & Vulkan-Loader"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_VULKAN);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("Vulkan Memory Allocator"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_VMA);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("OpenVR"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_OPENVR);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("OpenXR"))
-	{
-		const resources::data_resource resource = resources::load_data_resource(IDR_LICENSE_OPENXR);
-		ImGui::TextUnformatted(static_cast<const char *>(resource.data), static_cast<const char *>(resource.data) + resource.data_size);
-	}
-	if (ImGui::CollapsingHeader("Solarized"))
-	{
-		ImGui::TextUnformatted("Copyright (C) 2011 Ethan Schoonover\
-\
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\
-\
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\
-\
-THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.");
-	}
-	if (ImGui::CollapsingHeader("Fork Awesome"))
-	{
-		ImGui::TextUnformatted("Copyright (C) 2018 Fork Awesome (https://forkawesome.github.io)\
-\
-This Font Software is licensed under the SIL Open Font License, Version 1.1. (http://scripts.sil.org/OFL)");
-	}
-
-	ImGui::PopTextWrapPos();
-}
-
 bool reshade::runtime::init_imgui_resources()
 {
 	// Adjust default font size based on the vertical resolution
 	if (_font_size == 0)
 		_editor_font_size = _font_size = _height >= 2160 ? 26 : _height >= 1440 ? 20 : 13;
+
+	_font_size *= 1.5f;
 
 	const bool has_combined_sampler_and_view = _device->check_capability(api::device_caps::sampler_with_resource_view);
 
