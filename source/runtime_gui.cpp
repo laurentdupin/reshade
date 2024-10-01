@@ -461,24 +461,8 @@ void reshade::runtime::draw_gui()
 	CheckAndOpenTranslationDataBuffers();
 	UpdateTranslationData();
 
-	bool show_overlay = _show_overlay;
+	bool show_overlay = true;
 	api::input_source show_overlay_source = api::input_source::keyboard;
-
-	if (_input != nullptr)
-	{
-		if (_show_overlay && !_ignore_shortcuts && !_imgui_context->IO.NavVisible && _input->is_key_pressed(0x1B /* VK_ESCAPE */))
-			show_overlay = false; // Close when pressing the escape button and not currently navigating with the keyboard
-		else if (!_ignore_shortcuts && _input->is_key_pressed(_overlay_key_data, _force_shortcut_modifiers) && _imgui_context->ActiveId == 0)
-			show_overlay = !_show_overlay;
-
-		if (!_ignore_shortcuts)
-		{
-			if (_input->is_key_pressed(_fps_key_data, _force_shortcut_modifiers))
-				_show_fps = _show_fps ? 0 : 1;
-			if (_input->is_key_pressed(_frametime_key_data, _force_shortcut_modifiers))
-				_show_frametime = _show_frametime ? 0 : 1;
-		}
-	}
 
 	if (show_overlay != _show_overlay)
 		open_overlay(show_overlay, show_overlay_source);
