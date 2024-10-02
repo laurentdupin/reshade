@@ -159,7 +159,7 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 	// Create and show window instance
 	const HWND window_handle = CreateWindow(
 		wc.lpszClassName, L"ExtractAndTranslate", window_x > 0 && window_y > 0 ? WS_OVERLAPPEDWINDOW : WS_POPUP,
-		window_rect.left, window_rect.top, window_rect.right - window_rect.left, window_rect.bottom - window_rect.top, trackedwindow, nullptr, hInstance, nullptr);
+		window_rect.left, window_rect.top, window_rect.right - window_rect.left, window_rect.bottom - window_rect.top, NULL, nullptr, hInstance, nullptr);
 
 	SetWindowLong(window_handle, GWL_STYLE, 0);
 
@@ -242,6 +242,11 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) && msg.message != WM_QUIT)
 			{
 				DispatchMessage(&msg);
+
+				if (trackingtype == TRACKING_TYPE::WINDOW)
+				{
+					SendMessage(trackedwindow, msg.message, msg.wParam, msg.lParam);
+				}
 			}
 
 			if (msg.message == WM_QUIT)

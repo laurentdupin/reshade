@@ -285,6 +285,22 @@ void reshade::runtime::CheckAndOpenTranslationDataBuffers()
 		}
 	}
 
+	if (_hMapFileExtractionHeader == NULL)
+	{
+		_hMapFileExtractionHeader = OpenFileMapping(PAGE_READWRITE, FALSE, L"TextExtractionOutputHeaderMemory");
+
+		if (_hMapFileExtractionHeader != NULL)
+		{
+			_pBufExtractionHeader = (LPTSTR)MapViewOfFile(_hMapFileExtractionHeader, FILE_MAP_READ, 0, 0, 0);
+
+			if (_pBufExtractionHeader == NULL)
+			{
+				CloseHandle(_hMapFileExtractionHeader);
+				_hMapFileExtractionHeader = NULL;
+			}
+		}
+	}
+
 	if (_MutexExtraction == NULL)
 	{
 		_MutexExtraction = CreateMutex(NULL, FALSE, L"TextExtractionOutputMutex");
@@ -302,6 +318,22 @@ void reshade::runtime::CheckAndOpenTranslationDataBuffers()
 			{
 				CloseHandle(_hMapFileTranslation);
 				_hMapFileTranslation = NULL;
+			}
+		}
+	}
+
+	if (_hMapFileTranslationHeader == NULL)
+	{
+		_hMapFileTranslationHeader = OpenFileMapping(PAGE_READWRITE, FALSE, L"TranslationOutputHeaderMemory");
+
+		if (_hMapFileTranslationHeader != NULL)
+		{
+			_pBufTranslationHeader = (LPTSTR)MapViewOfFile(_hMapFileTranslationHeader, FILE_MAP_READ, 0, 0, 0);
+
+			if (_pBufTranslationHeader == NULL)
+			{
+				CloseHandle(_hMapFileTranslationHeader);
+				_hMapFileTranslationHeader = NULL;
 			}
 		}
 	}
@@ -354,10 +386,11 @@ void reshade::runtime::UpdateTranslationData()
 {
 	char *ReceivingBuffer = new char[TRANSLATION_AND_EXTRACTION_BUFFER_SIZE];
 
-	if (_pBufExtraction != NULL && _MutexExtraction != NULL)
+	if (_pBufExtraction != NULL && _MutexExtraction != NULL && _pBufExtractionHeader != NULL)
 	{
 		WaitForSingleObject(_MutexExtraction, INFINITE);
-		strcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufExtraction);
+		memcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufExtraction, ((StandardHeader*)_pBufExtractionHeader)->Size);
+		ReceivingBuffer[((StandardHeader *)_pBufExtractionHeader)->Size] = '\0';
 		ReleaseMutex(_MutexExtraction);
 
 		auto BufferedString = std::string(ReceivingBuffer);
@@ -388,10 +421,11 @@ void reshade::runtime::UpdateTranslationData()
 		}
 	}
 
-	if (_pBufTranslation != NULL && _MutexTranslation != NULL)
+	if (_pBufTranslation != NULL && _MutexTranslation != NULL && _pBufTranslationHeader != NULL)
 	{
 		WaitForSingleObject(_MutexTranslation, INFINITE);
-		strcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufTranslation);
+		memcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufTranslation, ((StandardHeader *)_pBufTranslationHeader)->Size);
+		ReceivingBuffer[((StandardHeader *)_pBufTranslationHeader)->Size] = '\0';
 		ReleaseMutex(_MutexTranslation);
 
 		if (strlen(ReceivingBuffer) > 0)
@@ -431,6 +465,18 @@ void reshade::runtime::CloseTranslationDataBuffers()
 		_hMapFileExtraction = NULL;
 	}
 
+	if (_pBufExtractionHeader != NULL)
+	{
+		UnmapViewOfFile(_pBufExtractionHeader);
+		_pBufExtractionHeader = NULL;
+	}
+
+	if (_hMapFileExtractionHeader != NULL)
+	{
+		CloseHandle(_hMapFileExtractionHeader);
+		_hMapFileExtractionHeader = NULL;
+	}
+
 	if (_MutexExtraction != NULL)
 	{
 		CloseHandle(_MutexExtraction);
@@ -441,6 +487,18 @@ void reshade::runtime::CloseTranslationDataBuffers()
 	{
 		UnmapViewOfFile(_pBufTranslation);
 		_pBufTranslation = NULL;
+	}
+
+	if (_hMapFileTranslation != NULL)
+	{
+		CloseHandle(_hMapFileTranslation);
+		_hMapFileTranslation = NULL;
+	}
+
+	if (_pBufTranslationHeader != NULL)
+	{
+		UnmapViewOfFile(_pBufTranslationHeader);
+		_pBufTranslationHeader = NULL;
 	}
 
 	if (_hMapFileTranslation != NULL)
@@ -463,14 +521,14 @@ void reshade::runtime::draw_gui()
 	CheckAndOpenTranslationDataBuffers();
 	UpdateTranslationData();
 
-	bool show_overlay = true;
+	_show_overlay = true;
 	api::input_source show_overlay_source = api::input_source::keyboard;
-
-	if (show_overlay != _show_overlay)
-		open_overlay(show_overlay, show_overlay_source);
 
 	_ignore_shortcuts = false;
 	_block_input_next_frame = false;
+
+	_input->block_mouse_input(false);
+	_input->block_keyboard_input(false);
 
 	if (!_show_overlay)
 	{
@@ -497,11 +555,10 @@ void reshade::runtime::draw_gui()
 
 	if (_input != nullptr)
 	{
-		imgui_io.MouseDrawCursor = _show_overlay;
-
 		// Scale mouse position in case render resolution does not match the window size
 		unsigned int max_position[2];
 		_input->max_mouse_position(max_position);
+
 		imgui_io.AddMousePosEvent(
 			_input->mouse_position_x() * (imgui_io.DisplaySize.x / max_position[0]),
 			_input->mouse_position_y() * (imgui_io.DisplaySize.y / max_position[1]));
@@ -638,12 +695,42 @@ void reshade::runtime::draw_gui()
 	// Create ImGui widgets and windows
 	if (true)
 	{
-		ImGui::SetNextWindowPos(_imgui_context->Style.WindowPadding);
-		ImGui::SetNextWindowSize(ImVec2(imgui_io.DisplaySize.x - 20.0f, 0.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
-		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.862745f, 0.862745f, 0.862745f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.117647f, 0.117647f, 0.117647f, show_spinner ? 0.0f : 0.7f));
-		ImGui::Begin("Splash Window", nullptr,
+		if (ExtractedTexts.size() > 0)
+		{
+			for (auto &text : ExtractedTexts)
+			{
+				ImGui::SetNextWindowPos(ImVec2(imgui_io.DisplaySize.x * text.TopLeftCornerX, imgui_io.DisplaySize.y * text.TopLeftCornerY), 0, ImVec2(0.0f, 1.0f));
+				ImGui::SetNextWindowSize(ImVec2(imgui_io.DisplaySize.x * (text.BottomRightCornerX - text.TopLeftCornerX), imgui_io.DisplaySize.y * (text.TopLeftCornerY - text.BottomRightCornerY)));
+
+				ImGui::Begin(text.Text.c_str(), nullptr,
+				ImGuiWindowFlags_NoDecoration |
+				ImGuiWindowFlags_NoNav |
+				ImGuiWindowFlags_NoMove |
+				ImGuiWindowFlags_NoInputs |
+				ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoDocking |
+				ImGuiWindowFlags_NoFocusOnAppearing);
+
+				{
+					if (TranslatedTexts.find(text.Text) != TranslatedTexts.end())
+					{
+						ImGui::Text(TranslatedTexts.at(text.Text).c_str());
+					}
+					else
+					{
+						ImGui::Text(text.Text.c_str());
+					}
+				}
+
+				ImGui::End();
+			}
+		}
+		else
+		{
+			ImGui::SetNextWindowPos(ImVec2(imgui_io.DisplaySize.x * 0.5f, imgui_io.DisplaySize.y * 0.5f), NULL, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowSize(ImVec2(100.0f, 50.0f));
+
+			ImGui::Begin("No connection", nullptr,
 			ImGuiWindowFlags_NoDecoration |
 			ImGuiWindowFlags_NoNav |
 			ImGuiWindowFlags_NoMove |
@@ -651,79 +738,12 @@ void reshade::runtime::draw_gui()
 			ImGuiWindowFlags_NoSavedSettings |
 			ImGuiWindowFlags_NoDocking |
 			ImGuiWindowFlags_NoFocusOnAppearing);
-		{
-			for (auto &text : ExtractedTexts)
-			{
-				ImGui::Text(text.Text.c_str());
-
-				if (TranslatedTexts.find(text.Text) != TranslatedTexts.end())
-				{
-					ImGui::SameLine();
-					ImGui::Text(" => ");
-					ImGui::SameLine();
-					ImGui::Text(TranslatedTexts.at(text.Text).c_str());
-				}
-			}
-
-			ImGui::Spacing();
 
 			{
-				ImGui::ProgressBar(0.0f, ImVec2(-1, 0), "");
-				ImGui::SameLine(15);
-
-				if (_input == nullptr)
-				{
-					ImGui::TextColored(COLOR_YELLOW, ("No keyboard or mouse input available."));
-					if (_input_gamepad != nullptr)
-					{
-						ImGui::SameLine();
-						ImGui::TextColored(COLOR_YELLOW, ("Use gamepad instead: Press 'left + right shoulder + start button' to open the configuration overlay."));
-					}
-				}
-				else
-				{
-					const std::string label = ("Press '%s' to open the configuration overlay.");
-					const size_t key_offset = label.find("%s");
-
-					ImGui::TextUnformatted(label.c_str(), label.c_str() + key_offset);
-					ImGui::SameLine(0.0f, 0.0f);
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-					ImGui::TextUnformatted(input::key_name(_overlay_key_data).c_str());
-					ImGui::PopStyleColor();
-					ImGui::SameLine(0.0f, 0.0f);
-					ImGui::TextUnformatted(label.c_str() + key_offset + 2, label.c_str() + label.size());
-				}
+				ImGui::Text("No connection");
 			}
 
-			std::string error_message;
-
-			if (!error_message.empty())
-			{
-				error_message += ("Check the log for more details.");
-				ImGui::Spacing();
-				ImGui::TextColored(COLOR_RED, error_message.c_str());
-			}
-		}
-
-		viewport_offset.y += ImGui::GetWindowHeight() + _imgui_context->Style.WindowPadding.x; // Add small space between windows
-
-		ImGui::End();
-		ImGui::PopStyleColor(2);
-		ImGui::PopStyleVar();
-	}
-
-	if (_show_overlay)
-	{
-		const ImGuiViewport *const viewport = ImGui::GetMainViewport();
-
-		if (_imgui_context->NavInputSource > ImGuiInputSource_Mouse && _imgui_context->NavWindowingTarget == nullptr)
-		{
-			// Reset input source to mouse when the cursor is moved
-			if (_input != nullptr && (_input->mouse_movement_delta_x() != 0 || _input->mouse_movement_delta_y() != 0))
-				_imgui_context->NavInputSource = ImGuiInputSource_Mouse;
-			// Ensure there is always a window that has navigation focus when keyboard or gamepad navigation is used (choose the first overlay window created next)
-			else if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow))
-				ImGui::SetNextWindowFocus();
+			ImGui::End();
 		}
 	}
 
@@ -732,14 +752,6 @@ void reshade::runtime::draw_gui()
 
 	// Render ImGui widgets and windows
 	ImGui::Render();
-
-	if (_input != nullptr)
-	{
-		const bool block_input = _input_processing_mode != 0 && (_show_overlay || _block_input_next_frame);
-
-		_input->block_mouse_input(block_input && (imgui_io.WantCaptureMouse || _input_processing_mode == 2));
-		_input->block_keyboard_input(block_input && (imgui_io.WantCaptureKeyboard || _input_processing_mode == 2));
-	}
 
 	if (ImDrawData *const draw_data = ImGui::GetDrawData();
 		draw_data != nullptr && draw_data->CmdListsCount != 0 && draw_data->TotalVtxCount != 0)
@@ -1094,17 +1106,6 @@ void reshade::runtime::destroy_imgui_resources()
 	_imgui_pipeline = {};
 	_device->destroy_pipeline_layout(_imgui_pipeline_layout);
 	_imgui_pipeline_layout = {};
-}
-
-bool reshade::runtime::open_overlay(bool open, api::input_source source)
-{
-
-	_show_overlay = open;
-
-	if (open)
-		_imgui_context->NavInputSource = static_cast<ImGuiInputSource>(source);
-
-	return true;
 }
 
 #endif

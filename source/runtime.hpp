@@ -31,6 +31,17 @@ struct ExtractedText
 	std::string Text = "";
 };
 
+struct StandardHeader
+{
+	int Type;
+	int Index;
+	int Size;
+	int Width;
+	int Height;
+	int Depth;
+	int Flags;
+};
+
 namespace reshade
 {
 	struct effect;
@@ -165,8 +176,6 @@ namespace reshade
 		void set_current_preset_path(const char *path) final;
 
 		void reorder_techniques(size_t count, const api::effect_technique *techniques) final;
-
-		bool open_overlay(bool open, api::input_source source) final;
 
 		void set_color_space(api::color_space color_space) final { _back_buffer_color_space = color_space; }
 
@@ -315,10 +324,18 @@ namespace reshade
 
 		HANDLE _hMapFileExtraction = NULL;
 		PVOID _pBufExtraction = NULL;
+
+		HANDLE _hMapFileExtractionHeader = NULL;
+		PVOID _pBufExtractionHeader = NULL;
+
 		HANDLE _MutexExtraction = NULL;
 
 		HANDLE _hMapFileTranslation = NULL;
 		PVOID _pBufTranslation = NULL;
+
+		HANDLE _hMapFileTranslationHeader = NULL;
+		PVOID _pBufTranslationHeader = NULL;
+
 		HANDLE _MutexTranslation = NULL;
 
 		std::vector<ExtractedText> ExtractedTexts;
