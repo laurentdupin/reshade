@@ -327,6 +327,7 @@ namespace reshade
 
 		HANDLE _hMapFileExtractionHeader = NULL;
 		PVOID _pBufExtractionHeader = NULL;
+		int LastExtractionIndex = 0;
 
 		HANDLE _MutexExtraction = NULL;
 
@@ -335,6 +336,7 @@ namespace reshade
 
 		HANDLE _hMapFileTranslationHeader = NULL;
 		PVOID _pBufTranslationHeader = NULL;
+		int LastTranslationIndex = 0;
 
 		HANDLE _MutexTranslation = NULL;
 

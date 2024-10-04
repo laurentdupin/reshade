@@ -298,6 +298,10 @@ void reshade::runtime::CheckAndOpenTranslationDataBuffers()
 				CloseHandle(_hMapFileExtractionHeader);
 				_hMapFileExtractionHeader = NULL;
 			}
+			else
+			{
+				LastExtractionIndex = 0;
+			}
 		}
 	}
 
@@ -334,6 +338,10 @@ void reshade::runtime::CheckAndOpenTranslationDataBuffers()
 			{
 				CloseHandle(_hMapFileTranslationHeader);
 				_hMapFileTranslationHeader = NULL;
+			}
+			else
+			{
+				LastTranslationIndex = 0;
 			}
 		}
 	}
@@ -391,33 +399,39 @@ void reshade::runtime::UpdateTranslationData()
 		WaitForSingleObject(_MutexExtraction, INFINITE);
 		memcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufExtraction, ((StandardHeader*)_pBufExtractionHeader)->Size);
 		ReceivingBuffer[((StandardHeader *)_pBufExtractionHeader)->Size] = '\0';
+		auto extractionindex = ((StandardHeader *)_pBufExtractionHeader)->Index;
 		ReleaseMutex(_MutexExtraction);
 
-		auto BufferedString = std::string(ReceivingBuffer);
-		ConvertUnicodeEscapedToUtf8(BufferedString);
-
-		if (strlen(ReceivingBuffer) > 0)
+		if (LastExtractionIndex != extractionindex)
 		{
-			try
+			auto BufferedString = std::string(ReceivingBuffer);
+			ConvertUnicodeEscapedToUtf8(BufferedString);
+
+			if (strlen(ReceivingBuffer) > 0)
 			{
-				auto extraction = json::parse(BufferedString);
-
-				ExtractedTexts.clear();
-
-				for (auto &extract : extraction)
+				try
 				{
-					auto &back = ExtractedTexts.emplace_back();
-					back.TopLeftCornerX = extract["TopLeftCornerX"];
-					back.TopLeftCornerY = extract["TopLeftCornerY"];
-					back.BottomRightCornerX = extract["BottomRightCornerX"];
-					back.BottomRightCornerY = extract["BottomRightCornerY"];
-					back.Text = extract["Text"];
+					auto extraction = json::parse(BufferedString);
+
+					ExtractedTexts.clear();
+
+					for (auto &extract : extraction)
+					{
+						auto &back = ExtractedTexts.emplace_back();
+						back.TopLeftCornerX = extract["TopLeftCornerX"];
+						back.TopLeftCornerY = extract["TopLeftCornerY"];
+						back.BottomRightCornerX = extract["BottomRightCornerX"];
+						back.BottomRightCornerY = extract["BottomRightCornerY"];
+						back.Text = extract["Text"];
+					}
+				}
+				catch (const std::exception &)
+				{
+
 				}
 			}
-			catch (const std::exception &)
-			{
-				
-			}
+
+			LastExtractionIndex = extractionindex;
 		}
 	}
 
@@ -426,25 +440,31 @@ void reshade::runtime::UpdateTranslationData()
 		WaitForSingleObject(_MutexTranslation, INFINITE);
 		memcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufTranslation, ((StandardHeader *)_pBufTranslationHeader)->Size);
 		ReceivingBuffer[((StandardHeader *)_pBufTranslationHeader)->Size] = '\0';
+		auto translationindex = ((StandardHeader *)_pBufTranslationHeader)->Index;
 		ReleaseMutex(_MutexTranslation);
 
-		if (strlen(ReceivingBuffer) > 0)
+		if (LastTranslationIndex != translationindex)
 		{
-			try
+			if (strlen(ReceivingBuffer) > 0)
 			{
-				auto translation = json::parse(ReceivingBuffer);
-
-				TranslatedTexts.clear();
-
-				for (auto &translate : translation.items())
+				try
 				{
-					TranslatedTexts.try_emplace(translate.key(), translate.value());
+					auto translation = json::parse(ReceivingBuffer);
+
+					TranslatedTexts.clear();
+
+					for (auto &translate : translation.items())
+					{
+						TranslatedTexts.try_emplace(translate.key(), translate.value());
+					}
+				}
+				catch (const std::exception &)
+				{
+
 				}
 			}
-			catch (const std::exception &)
-			{
 
-			}
+			LastTranslationIndex = translationindex;
 		}
 	}
 
@@ -512,6 +532,28 @@ void reshade::runtime::CloseTranslationDataBuffers()
 		CloseHandle(_MutexTranslation);
 		_MutexTranslation = NULL;
 	}
+}
+
+void TextCentered(const std::string &text)
+{
+	float win_width = ImGui::GetWindowSize().x;
+	float text_width = ImGui::CalcTextSize(text.c_str()).x;
+
+	// calculate the indentation that centers the text on one line, relative
+	// to window left, regardless of the `ImGuiStyleVar_WindowPadding` value
+	float text_indentation = (win_width - text_width) * 0.5f;
+
+	// if text is too long to be drawn on one line, `text_indentation` can
+	// become too small or even negative, so we check a minimum indentation
+	float min_indentation = 20.0f;
+	if (text_indentation <= min_indentation) {
+		text_indentation = min_indentation;
+	}
+
+	ImGui::SameLine(text_indentation);
+	ImGui::PushTextWrapPos(win_width - text_indentation);
+	ImGui::TextWrapped(text.c_str());
+	ImGui::PopTextWrapPos();
 }
 
 void reshade::runtime::draw_gui()
@@ -690,7 +732,7 @@ void reshade::runtime::draw_gui()
 	ImVec2 viewport_offset = ImVec2(0, 0);
 	const bool show_spinner = false;
 
-	ImGui::ShowMetricsWindow();
+	//ImGui::ShowMetricsWindow();
 
 	// Create ImGui widgets and windows
 	if (true)
@@ -699,8 +741,29 @@ void reshade::runtime::draw_gui()
 		{
 			for (auto &text : ExtractedTexts)
 			{
-				ImGui::SetNextWindowPos(ImVec2(imgui_io.DisplaySize.x * text.TopLeftCornerX, imgui_io.DisplaySize.y * text.TopLeftCornerY), 0, ImVec2(0.0f, 1.0f));
-				ImGui::SetNextWindowSize(ImVec2(imgui_io.DisplaySize.x * (text.BottomRightCornerX - text.TopLeftCornerX), imgui_io.DisplaySize.y * (text.TopLeftCornerY - text.BottomRightCornerY)));
+				auto windowpos = ImVec2(imgui_io.DisplaySize.x * text.TopLeftCornerX, imgui_io.DisplaySize.y * text.TopLeftCornerY);
+				auto windowsizenormal = ImVec2(imgui_io.DisplaySize.x * (text.BottomRightCornerX - text.TopLeftCornerX), imgui_io.DisplaySize.y * (text.TopLeftCornerY - text.BottomRightCornerY));
+				auto windowsizetop = ImVec2(windowsizenormal.x, windowsizenormal.y * 0.4f);
+				auto windowsize = ImVec2();
+
+				if (false)
+				{
+					ImGui::SetNextWindowPos(windowpos, 0, ImVec2(0.0f, 1.0f));
+					ImGui::SetNextWindowSize(windowsizenormal);
+					windowsize = windowsizenormal;
+				}
+				else
+				{
+					windowpos = windowpos - ImVec2(0.0f, windowsizenormal.y * 0.95f);
+					ImGui::SetNextWindowPos(windowpos, 0, ImVec2(0.0f, 1.0f));
+					ImGui::SetNextWindowSize(windowsizetop);
+					windowsize = windowsizetop;
+				}
+
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, 0.f));
+
+				ImGui::SetNextWindowBgAlpha(0.0f);
 
 				ImGui::Begin(text.Text.c_str(), nullptr,
 				ImGuiWindowFlags_NoDecoration |
@@ -709,26 +772,47 @@ void reshade::runtime::draw_gui()
 				ImGuiWindowFlags_NoInputs |
 				ImGuiWindowFlags_NoSavedSettings |
 				ImGuiWindowFlags_NoDocking |
-				ImGuiWindowFlags_NoFocusOnAppearing);
-
+				ImGuiWindowFlags_NoFocusOnAppearing |
+				ImGuiWindowFlags_NoBackground);
 				{
+
 					if (TranslatedTexts.find(text.Text) != TranslatedTexts.end())
 					{
-						ImGui::Text(TranslatedTexts.at(text.Text).c_str());
+						if (ImGui::GetCurrentWindow()->FontWindowScale == 1.0f)
+						{
+							auto textsize = ImGui::CalcTextSize(TranslatedTexts.at(text.Text).c_str());
+							ImGui::SetWindowFontScale(windowsize.y * 1.025f / textsize.y);
+						}
+
+						TextCentered(TranslatedTexts.at(text.Text));
 					}
 					else
 					{
-						ImGui::Text(text.Text.c_str());
+						if (ImGui::GetCurrentWindow()->FontWindowScale == 1.0f)
+						{
+							auto textsize = ImGui::CalcTextSize(text.Text.c_str());
+							ImGui::SetWindowFontScale(windowsize.y * 1.025f / textsize.y);
+						}
+
+						TextCentered(text.Text);
 					}
 				}
 
 				ImGui::End();
+
+				ImGui::PopStyleVar();
+				ImGui::PopStyleVar();
 			}
 		}
-		else
+		else if (LastExtractionIndex == 0)
 		{
 			ImGui::SetNextWindowPos(ImVec2(imgui_io.DisplaySize.x * 0.5f, imgui_io.DisplaySize.y * 0.5f), NULL, ImVec2(0.5f, 0.5f));
-			ImGui::SetNextWindowSize(ImVec2(100.0f, 50.0f));
+			ImGui::SetNextWindowSize(ImVec2(400.0f, 50.0f));
+
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, 0.f));
+
+			ImGui::SetNextWindowBgAlpha(0.5f);
 
 			ImGui::Begin("No connection", nullptr,
 			ImGuiWindowFlags_NoDecoration |
@@ -740,10 +824,20 @@ void reshade::runtime::draw_gui()
 			ImGuiWindowFlags_NoFocusOnAppearing);
 
 			{
-				ImGui::Text("No connection");
+				auto textsize = ImGui::CalcTextSize("No connection");
+
+				if (ImGui::GetCurrentWindow()->FontWindowScale == 1.0f)
+				{
+					ImGui::SetWindowFontScale(50.0f * 1.0f / textsize.y);
+				}
+				
+				TextCentered("No connection");
 			}
 
 			ImGui::End();
+
+			ImGui::PopStyleVar();
+			ImGui::PopStyleVar();
 		}
 	}
 
@@ -779,10 +873,7 @@ void reshade::runtime::draw_gui()
 bool reshade::runtime::init_imgui_resources()
 {
 	// Adjust default font size based on the vertical resolution
-	if (_font_size == 0)
-		_editor_font_size = _font_size = _height >= 2160 ? 26 : _height >= 1440 ? 20 : 13;
-
-	_font_size *= 1.5f;
+	_font_size = 48;
 
 	const bool has_combined_sampler_and_view = _device->check_capability(api::device_caps::sampler_with_resource_view);
 

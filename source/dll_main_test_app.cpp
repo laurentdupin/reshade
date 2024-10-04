@@ -236,7 +236,15 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 			{
 				RECT trackedwindowrect;
 				GetWindowRect(trackedwindow, &trackedwindowrect);
-				SetWindowPos(window_handle, NULL, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
+
+				if (GetForegroundWindow() == window_handle)
+				{
+					SetWindowPos(window_handle, HWND_TOPMOST, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
+				}
+				else
+				{
+					SetWindowPos(window_handle, HWND_NOTOPMOST, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
+				}
 			}
 
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) && msg.message != WM_QUIT)
