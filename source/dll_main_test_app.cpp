@@ -7,7 +7,12 @@
 #include "dll_log.hpp"
 #include "hook_manager.hpp"
 #include "com_ptr.hpp"
+#include <d3d9.h>
 #include <d3d11.h>
+#include <d3d12.h>
+#include <D3D12Downlevel.h>
+#include <GL/gl3w.h>
+#include <vulkan/vulkan.h>
 
 extern HMODULE g_module_handle;
 extern std::filesystem::path g_reshade_dll_path;
@@ -16,6 +21,8 @@ extern std::filesystem::path g_target_executable_path;
 
 extern std::filesystem::path get_base_path(bool default_to_target_executable_path = false);
 extern std::filesystem::path get_module_path(HMODULE module);
+
+bool bShouldHideUI = false;
 
 #define HR_CHECK(exp) { const HRESULT res = (exp); assert(SUCCEEDED(res)); }
 #define VK_CHECK(exp) { const VkResult res = (exp); assert(res == VK_SUCCESS); }
@@ -193,7 +200,6 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 
 	switch (api)
 	{
-	#pragma region D3D11 Implementation
 	case DEVICE_API::D3D11:
 	{
 		const scoped_module_handle dxgi_module(L"dxgi.dll");
@@ -213,12 +219,12 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 			desc.Windowed = true;
 			desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-#ifndef NDEBUG
+/*#ifndef NDEBUG
 			const UINT flags = D3D11_CREATE_DEVICE_DEBUG;
 #else
 			const UINT flags = 0;
-#endif
-			HR_CHECK(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, nullptr, 0, D3D11_SDK_VERSION, &desc, &swapchain, &device, nullptr, &immediate_context));
+#endif*/
+			HR_CHECK(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &desc, &swapchain, &device, nullptr, &immediate_context));
 		}
 
 		com_ptr<ID3D11Texture2D> backbuffer;
@@ -237,21 +243,15 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 				RECT trackedwindowrect;
 				GetWindowRect(trackedwindow, &trackedwindowrect);
 
-				if (GetForegroundWindow() == window_handle)
-				{
-					SetWindowPos(window_handle, HWND_TOPMOST, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
-				}
-				else
-				{
-					SetWindowPos(window_handle, HWND_NOTOPMOST, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
-				}
+				bShouldHideUI = GetForegroundWindow() != trackedwindow;
+				SetWindowPos(window_handle, HWND_TOPMOST, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
 			}
 
 			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) && msg.message != WM_QUIT)
 			{
 				DispatchMessage(&msg);
 
-				if (trackingtype == TRACKING_TYPE::WINDOW)
+				if (trackingtype == TRACKING_TYPE::WINDOW && !bShouldHideUI)
 				{
 					SendMessage(trackedwindow, msg.message, msg.wParam, msg.lParam);
 				}
@@ -279,7 +279,117 @@ int WINAPI CreateAndRunWindow(TRACKING_TYPE trackingtype, int screenid, HWND tra
 			HR_CHECK(swapchain->Present(1, 0));
 		}
 	}
-	#pragma endregion
+		break;
+	case DEVICE_API::OPENGL:
+	{
+		const scoped_module_handle opengl_module(L"opengl32.dll");
+
+		// Initialize OpenGL
+		const HWND temp_window_handle = CreateWindow(TEXT("STATIC"), nullptr, WS_POPUP, 0, 0, 0, 0, window_handle, nullptr, hInstance, nullptr);
+		if (temp_window_handle == nullptr)
+			return 0;
+
+		const HDC hdc1 = GetDC(temp_window_handle);
+		const HDC hdc2 = GetDC(window_handle);
+
+		PIXELFORMATDESCRIPTOR pfd = { sizeof(pfd), 1 };
+		pfd.dwFlags = PFD_DOUBLEBUFFER | PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
+		pfd.iPixelType = PFD_TYPE_RGBA;
+		pfd.cColorBits = 24;
+		pfd.cAlphaBits = 8;
+
+		int pix_format = ChoosePixelFormat(hdc1, &pfd);
+		SetPixelFormat(hdc1, pix_format, &pfd);
+
+		const HGLRC hglrc1 = wglCreateContext(hdc1);
+		if (hglrc1 == nullptr)
+			return 0;
+
+		wglMakeCurrent(hdc1, hglrc1);
+
+		const auto wglChoosePixelFormatARB = reinterpret_cast<BOOL(WINAPI *)(HDC, const int *, const FLOAT *, UINT, int *, UINT *)>(wglGetProcAddress("wglChoosePixelFormatARB"));
+		const auto wglCreateContextAttribsARB = reinterpret_cast<HGLRC(WINAPI *)(HDC, HGLRC, const int *)>(wglGetProcAddress("wglCreateContextAttribsARB"));
+
+		const int pix_attribs[] = {
+			0x2011 /* WGL_DOUBLE_BUFFER_ARB */, 1,
+			0x2001 /* WGL_DRAW_TO_WINDOW_ARB */, 1,
+			0x2010 /* WGL_SUPPORT_OPENGL_ARB */, 1,
+			0x2013 /* WGL_PIXEL_TYPE_ARB */, 0x202B /* WGL_TYPE_RGBA_ARB */,
+			0x2014 /* WGL_COLOR_BITS_ARB */, pfd.cColorBits,
+			0x201B /* WGL_ALPHA_BITS_ARB */, pfd.cAlphaBits,
+			0x2041 /* WGL_SAMPLE_BUFFERS_ARB */, multisample ? GL_TRUE : GL_FALSE,
+			0x2042 /* WGL_SAMPLES_ARB */, multisample ? 4 : 1,
+			0 // Terminate list
+		};
+
+		UINT num_formats = 0;
+		if (!wglChoosePixelFormatARB(hdc2, pix_attribs, nullptr, 1, &pix_format, &num_formats))
+			return 0;
+
+		SetPixelFormat(hdc2, pix_format, &pfd);
+
+		// Create an OpenGL 4.3 context
+		const int attribs[] = {
+			0x2091 /* WGL_CONTEXT_MAJOR_VERSION_ARB */, 4,
+			0x2092 /* WGL_CONTEXT_MINOR_VERSION_ARB */, 3,
+			0 // Terminate list
+		};
+
+		const HGLRC hglrc2 = wglCreateContextAttribsARB(hdc2, nullptr, attribs);
+		if (hglrc2 == nullptr)
+			return 0;
+
+		wglMakeCurrent(nullptr, nullptr);
+		wglDeleteContext(hglrc1);
+		DestroyWindow(temp_window_handle);
+
+		wglMakeCurrent(hdc2, hglrc2);
+
+		while (true)
+		{
+			if (trackingtype == TRACKING_TYPE::SCREEN)
+			{
+
+			}
+			else if (trackingtype == TRACKING_TYPE::WINDOW)
+			{
+				RECT trackedwindowrect;
+				GetWindowRect(trackedwindow, &trackedwindowrect);
+
+				bShouldHideUI = GetForegroundWindow() != trackedwindow;
+				SetWindowPos(window_handle, HWND_TOPMOST, trackedwindowrect.left, trackedwindowrect.top, trackedwindowrect.right - trackedwindowrect.left, trackedwindowrect.bottom - trackedwindowrect.top, NULL);
+			}
+
+			while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) && msg.message != WM_QUIT)
+			{
+				DispatchMessage(&msg);
+
+				if (trackingtype == TRACKING_TYPE::WINDOW && !bShouldHideUI)
+				{
+					SendMessage(trackedwindow, msg.message, msg.wParam, msg.lParam);
+				}
+			}
+
+			if (s_resize_w != 0)
+			{
+				glViewport(0, 0, s_resize_w, s_resize_h);
+
+				s_resize_w = s_resize_h = 0;
+			}
+
+			glClearColor(BACKGROUND_COLOR);
+			glClear(GL_COLOR_BUFFER_BIT);
+
+#if 1
+			wglSwapLayerBuffers(hdc2, WGL_SWAP_MAIN_PLANE); // Call directly for RenderDoc compatibility
+#else
+			SwapBuffers(hdc2);
+#endif
+		}
+
+		wglMakeCurrent(nullptr, nullptr);
+		wglDeleteContext(hglrc2);
+	}
 		break;
 	default:
 		msg.wParam = EXIT_FAILURE;

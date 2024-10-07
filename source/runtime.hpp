@@ -322,6 +322,8 @@ namespace reshade
 		std::vector<std::string> _log_lines;
 		#pragma endregion
 
+		char *_ReceivingBuffer = NULL;
+
 		HANDLE _hMapFileExtraction = NULL;
 		PVOID _pBufExtraction = NULL;
 

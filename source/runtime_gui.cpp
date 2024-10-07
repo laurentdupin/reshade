@@ -28,6 +28,8 @@
 
 using json = nlohmann::json;
 
+extern bool bShouldHideUI;
+
 static bool filter_text(const std::string_view text, const std::string_view filter)
 {
 	return filter.empty() ||
@@ -269,6 +271,11 @@ void reshade::runtime::build_font_atlas()
 
 void reshade::runtime::CheckAndOpenTranslationDataBuffers()
 {
+	if (_ReceivingBuffer == NULL)
+	{
+		_ReceivingBuffer = new char[TRANSLATION_AND_EXTRACTION_BUFFER_SIZE];
+	}
+
 	if (_hMapFileExtraction == NULL)
 	{
 		_hMapFileExtraction = OpenFileMapping(PAGE_READWRITE, FALSE, L"TextExtractionOutputDataMemory");
@@ -392,22 +399,20 @@ void ConvertUnicodeEscapedToUtf8(std::string &str)
 
 void reshade::runtime::UpdateTranslationData()
 {
-	char *ReceivingBuffer = new char[TRANSLATION_AND_EXTRACTION_BUFFER_SIZE];
-
 	if (_pBufExtraction != NULL && _MutexExtraction != NULL && _pBufExtractionHeader != NULL)
 	{
 		WaitForSingleObject(_MutexExtraction, INFINITE);
-		memcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufExtraction, ((StandardHeader*)_pBufExtractionHeader)->Size);
-		ReceivingBuffer[((StandardHeader *)_pBufExtractionHeader)->Size] = '\0';
+		memcpy_s(_ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufExtraction, ((StandardHeader*)_pBufExtractionHeader)->Size);
+		_ReceivingBuffer[((StandardHeader *)_pBufExtractionHeader)->Size] = '\0';
 		auto extractionindex = ((StandardHeader *)_pBufExtractionHeader)->Index;
 		ReleaseMutex(_MutexExtraction);
 
 		if (LastExtractionIndex != extractionindex)
 		{
-			auto BufferedString = std::string(ReceivingBuffer);
+			auto BufferedString = std::string(_ReceivingBuffer);
 			ConvertUnicodeEscapedToUtf8(BufferedString);
 
-			if (strlen(ReceivingBuffer) > 0)
+			if (strlen(_ReceivingBuffer) > 0)
 			{
 				try
 				{
@@ -438,18 +443,18 @@ void reshade::runtime::UpdateTranslationData()
 	if (_pBufTranslation != NULL && _MutexTranslation != NULL && _pBufTranslationHeader != NULL)
 	{
 		WaitForSingleObject(_MutexTranslation, INFINITE);
-		memcpy_s(ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufTranslation, ((StandardHeader *)_pBufTranslationHeader)->Size);
-		ReceivingBuffer[((StandardHeader *)_pBufTranslationHeader)->Size] = '\0';
+		memcpy_s(_ReceivingBuffer, TRANSLATION_AND_EXTRACTION_BUFFER_SIZE, (char *)_pBufTranslation, ((StandardHeader *)_pBufTranslationHeader)->Size);
+		_ReceivingBuffer[((StandardHeader *)_pBufTranslationHeader)->Size] = '\0';
 		auto translationindex = ((StandardHeader *)_pBufTranslationHeader)->Index;
 		ReleaseMutex(_MutexTranslation);
 
 		if (LastTranslationIndex != translationindex)
 		{
-			if (strlen(ReceivingBuffer) > 0)
+			if (strlen(_ReceivingBuffer) > 0)
 			{
 				try
 				{
-					auto translation = json::parse(ReceivingBuffer);
+					auto translation = json::parse(_ReceivingBuffer);
 
 					TranslatedTexts.clear();
 
@@ -467,12 +472,16 @@ void reshade::runtime::UpdateTranslationData()
 			LastTranslationIndex = translationindex;
 		}
 	}
-
-	delete[] ReceivingBuffer;
 }
 
 void reshade::runtime::CloseTranslationDataBuffers()
 {
+	if (_ReceivingBuffer != NULL)
+	{
+		delete[] _ReceivingBuffer;
+		_ReceivingBuffer = NULL;
+	}
+
 	if (_pBufExtraction != NULL)
 	{
 		UnmapViewOfFile(_pBufExtraction);
@@ -572,7 +581,7 @@ void reshade::runtime::draw_gui()
 	_input->block_mouse_input(false);
 	_input->block_keyboard_input(false);
 
-	if (!_show_overlay)
+	if (bShouldHideUI || !_show_overlay)
 	{
 		if (_input != nullptr)
 		{
@@ -743,7 +752,7 @@ void reshade::runtime::draw_gui()
 			{
 				auto windowpos = ImVec2(imgui_io.DisplaySize.x * text.TopLeftCornerX, imgui_io.DisplaySize.y * text.TopLeftCornerY);
 				auto windowsizenormal = ImVec2(imgui_io.DisplaySize.x * (text.BottomRightCornerX - text.TopLeftCornerX), imgui_io.DisplaySize.y * (text.TopLeftCornerY - text.BottomRightCornerY));
-				auto windowsizetop = ImVec2(windowsizenormal.x, windowsizenormal.y * 0.4f);
+				auto windowsizetop = ImVec2(windowsizenormal.x, windowsizenormal.y * 0.75f);
 				auto windowsize = ImVec2();
 
 				if (false)
@@ -754,7 +763,7 @@ void reshade::runtime::draw_gui()
 				}
 				else
 				{
-					windowpos = windowpos - ImVec2(0.0f, windowsizenormal.y * 0.95f);
+					windowpos = windowpos - ImVec2(0.0f, windowsizenormal.y);
 					ImGui::SetNextWindowPos(windowpos, 0, ImVec2(0.0f, 1.0f));
 					ImGui::SetNextWindowSize(windowsizetop);
 					windowsize = windowsizetop;
